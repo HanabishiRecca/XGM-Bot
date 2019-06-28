@@ -145,7 +145,7 @@ async function WarnUser(message) {
     if(!member || member.hasPermission(Discord.Permissions.FLAGS.MANAGE_MESSAGES))
         return;
     
-    const warnState = await warnsDb.findOne({ _id: member.user.id });
+    let warnState = await warnsDb.findOne({ _id: member.user.id });
     if(warnState) {
         warnState.warns++;
         warnsDb.update({ _id: warnState._id }, { $set: { warns: warnState.warns, dt: Date.now() } });
