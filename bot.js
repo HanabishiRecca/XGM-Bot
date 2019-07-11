@@ -99,7 +99,7 @@ async function CheckUser(message) {
                     if(response.info.user.seeTwilight)
                         member.addRole(twilightRoleId);
                 } else {
-                    message.reply(`пользователь **${response.info.user.username}** не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: **${usertag}**\n<https://xgm.guru/profile>`);
+                    message.reply(`пользователь **${response.info.user.username}** не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: **${member.user.tag}**\n<https://xgm.guru/profile>`);
                 }
             }
         } else {
