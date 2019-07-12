@@ -90,20 +90,20 @@ async function CheckUser(message) {
         if(response.info) {
             const data = await usersDb.findOne({ xgmid: response.info.user.id });
             if(data) {
-                message.reply(`пользователь **${response.info.user.username}** уже привязан к другому аккаунту Discord! :warning:`);
+                message.reply(`пользователь \`${response.info.user.username}\` уже привязан к другому аккаунту Discord! :warning:`);
             } else {
                 if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) === member.user.tag) {
                     usersDb.insert({ _id: message.author.id, xgmid: response.info.user.id });
-                    message.reply(`пользователь **${response.info.user.username}** подтвержден! :white_check_mark:`);
+                    message.reply(`пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
                     member.addRole(userRoleId);
                     if(response.info.user.seeTwilight)
                         member.addRole(twilightRoleId);
                 } else {
-                    message.reply(`пользователь **${response.info.user.username}** не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: **${member.user.tag}**\n<https://xgm.guru/profile>`);
+                    message.reply(`пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: \`${member.user.tag}\`\n<https://xgm.guru/profile>`);
                 }
             }
         } else {
-            message.reply(`пользователь с именем ${username} не зарегистрирован на сайте.`);
+            message.reply(`пользователь с именем \`${username}\` не зарегистрирован на сайте.`);
         }
     } catch (err) {
         console.error(err);
