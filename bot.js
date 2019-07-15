@@ -3,365 +3,366 @@
 process.on('uncaughtException', console.error);
 process.on('unhandledRejection', console.error);
 
-function Shutdown(err) {
+const Shutdown = err => {
     console.error(err);
     process.exit(1);
-}
+};
 
 if(!process.env.TOKEN)
     Shutdown('Token required.');
 
 const
-    Misc = require('./misc.js'),
-    request = require('request-promise-native'),
     Database = require('nedb-promise'),
     Discord = require('discord.js'),
-    XmlParser = require('fast-xml-parser');
-
-const
-    verifyCommand = '/verify',
-    whoisCommand = '/whois',
-    warnCommand = '/warn',
-    statusCommand = '/status';
-
-const
-    userRoleId = '543458703807086602',
-    readonlyRoleId = '544598116129832961',
-    twilightRoleId = '572031693947666478';
-
-const
-    serverId = '543458159818440705',
-    logChatId = '544576639636471808',
-    newsChatId = '543461066596941857';
+    Misc = require('./misc.js'),
+    config = require('./config.json'),
+    marks = require('./marks.js').list;
 
 const
     appDb = new Database({ filename: './storage/app.db', autoload: true }),
     usersDb = new Database({ filename: './storage/users.db', autoload: true }),
-    warnsDb = new Database({ filename: './storage/warns.db', autoload: true }),
-    marksDb = new Database({ filename: './storage/marks.db', autoload: true });
+    warnsDb = new Database({ filename: './storage/warns.db', autoload: true });
 
 const client = new Discord.Client({
-    messageCacheMaxSize: 0,
-    disabledEvents: ['GUILD_BAN_ADD', 'GUILD_BAN_REMOVE', 'CHANNEL_PINS_UPDATE', 'MESSAGE_DELETE', 'MESSAGE_UPDATE', 'MESSAGE_DELETE_BULK', 'USER_NOTE_UPDATE', 'USER_SETTINGS_UPDATE', 'PRESENCE_UPDATE', 'VOICE_STATE_UPDATE', 'TYPING_START', 'VOICE_SERVER_UPDATE', 'RELATIONSHIP_ADD', 'RELATIONSHIP_REMOVE'],
+    disabledEvents: (() => {
+        const events = [];
+        for(const event in Discord.Constants.WSEvents)
+            events.push(event);
+        return events;
+    })(),
 });
 
 client.on('disconnect', Shutdown);
-client.on('error', () => console.warn('Connection error!'));
+client.on('error', () => console.error('Connection error!'));
 client.on('reconnecting', () => console.warn('Reconnecting...'));
 client.on('resume', () => console.warn('Connection restored'));
-//client.on('rateLimit', console.warn);
-
-async function ReceiveMessage(message) {
-    if(!message.guild_id)
-        return;
-    
-    if(message.author.id == client.user.id)
-        return;
-    
-    if(message.content.startsWith(verifyCommand)) {
-        CheckUser(message);
-    } else if(message.content.startsWith(whoisCommand)) {
-        Whois(message);
-    } else if(message.content.startsWith(warnCommand)) {
-        WarnUser(message);
-    } else if(message.content.startsWith(statusCommand)) {
-        ShowStatus(message);
-    }
-}
-
-async function CheckUser(message) {
-    const channel = client.channels.get(message.channel_id);
-    
-    message.reply = (msg) => {
-        channel.send(msg, { reply: message.author.id });
-    };
-    
-    const member = await client.guilds.get(message.guild_id).fetchMember(message.author.id, false);
-    
-    if(await usersDb.findOne({ _id: message.author.id })) {
-        message.reply('аккаунт уже подтвержден.');
-        member.addRole(userRoleId);
-        return;
-    }
-    
-    const username = message.content.substring(verifyCommand.length).trim() || member.displayName;
-    try {
-        const response = JSON.parse(await request({ uri: `https://xgm.guru/api_user.php?username=${encodeURIComponent(username)}`, simple: false }));
-        if(response.info) {
-            const data = await usersDb.findOne({ xgmid: response.info.user.id });
-            if(data) {
-                message.reply(`пользователь \`${response.info.user.username}\` уже привязан к другому аккаунту Discord! :warning:`);
-            } else {
-                if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) === member.user.tag) {
-                    usersDb.insert({ _id: message.author.id, xgmid: response.info.user.id });
-                    message.reply(`пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
-                    member.addRole(userRoleId);
-                    if(response.info.user.seeTwilight)
-                        member.addRole(twilightRoleId);
-                } else {
-                    message.reply(`пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: \`${member.user.tag}\`\n<https://xgm.guru/profile>`);
-                }
-            }
-        } else {
-            message.reply(`пользователь с именем \`${username}\` не зарегистрирован на сайте.`);
-        }
-    } catch (err) {
-        console.error(err);
-        message.reply('что-то сломалось, разбудите админа!');
-    }
-}
-
-async function Whois(message) {
-    if(!(message.mentions && message.mentions.length))
-        return;
-    
-    const
-        channel = client.channels.get(message.channel_id),
-        userData = await usersDb.findOne({ _id: message.mentions[0].id });
-    
-    if(userData)
-        channel.send(`https://xgm.guru/user/${userData.xgmid}`, { reply: message.author.id });
-    else
-        channel.send('пользователь не сопоставлен.', { reply: message.author.id });
-}
+client.on('rateLimit', () => console.warn('Rate limit!'));
 
 const
-    maxWarns = 3,
-    warnPeriod = 86400000;
+    warnPeriod = 86400000,
+    Endpoints = Discord.Constants.Endpoints,
+    FLAGS = Discord.Permissions.FLAGS,
+    UserMention = user => `<@${user.id || user}>`,
+    UserTag = user => `${user.username}#${user.discriminator}`,
+    GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
+    GetServer = server => client.rest.makeRequest('get', Endpoints.Guild(server), true),
+    AddRole = (server, user, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(user).Role(role), true),
+    RemoveRole = (server, user, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(user).Role(role), true),
+    SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
+    GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
+    AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
+    GetReactions = (channel, message, emoji) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
+    CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag);
 
-async function WarnUser(message) {
-    const author = await client.guilds.get(message.guild_id).fetchMember(message.author.id, false);
-    if(!author.hasPermission(Discord.Permissions.FLAGS.MANAGE_MESSAGES))
-        return;
+const HasPermission = async (server, user, flag) => {
+    if(!server.id)
+        server = await GetServer(server);
     
-    if(!(message.mentions && message.mentions.length))
-        return;
-    
-    const userId = message.mentions[0].id;
-    if(userId == client.id)
-        return;
-    
-    const member = await client.guilds.get(message.guild_id).fetchMember(userId, false);
-    if(!member || member.hasPermission(Discord.Permissions.FLAGS.MANAGE_MESSAGES))
-        return;
-    
-    let warnState = await warnsDb.findOne({ _id: member.user.id });
-    if(warnState) {
-        warnState.warns++;
-        warnsDb.update({ _id: warnState._id }, { $set: { warns: warnState.warns, dt: Date.now() } });
-    } else {
-        warnState = { _id: member.user.id, warns: 1, dt: Date.now() };
-        warnsDb.insert(warnState);
+    const roles = user.roles || (await GetMember(server, user.id || user)).roles;
+    for(let i = 0; i < roles.length; i++) {
+        const
+            rid = roles[i],
+            role = server.roles.find(elem => elem.id == rid);
+        
+        if(role && CheckPermission(role.permissions, flag))
+            return true;
     }
     
-    const
-        channel = client.channels.get(message.channel_id),
-        wcstr = `${warnState.warns}/${maxWarns}`;
-    
-    channel.send(`Пользователь ${member.toString()} получил предупреждение ${wcstr}!\nВыдано модератором ${author.toString()}`);
-    member.user.send(`Вы получили предупреждение ${wcstr}!`);
-    
-    if(warnState.warns >= maxWarns) {
-        member.addRole(readonlyRoleId);
-        const tstr = Misc.FormatWarnTime((warnState.warns - maxWarns + 1) * warnPeriod);
-        channel.send(`Пользователь ${member.toString()} превысил лимит предупреждений и получили статус **Read only**! Истекает через: ${tstr}`);
-        member.user.send(`Вы превысили лимит предупреждений и получил статус **Read only**! Истекает через: ${tstr}`);
-    }
-}
+    return false;
+};
 
-async function CheckWarn(warnState, now) {
-    if(warnState.dt + warnPeriod > now)
-        return;
+const commands = {
+    verify: async message => {
+        const member = await GetMember(message.guild_id, message.author);
+        if(!member)
+            return;
+        
+        if(await usersDb.findOne({ _id: message.author.id })) {
+            message.reply('аккаунт уже подтвержден.');
+            AddRole(message.guild_id, message.author, config.role.user);
+            return;
+        }
+        
+        const
+            username = message.content.trim() || member.nick || message.author.username,
+            response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?username=${encodeURIComponent(username)}`));
+        
+        if(!(response && response.info)) {
+            message.reply(`пользователь с именем \`${username}\` не зарегистрирован на сайте.`);
+            return;
+        }
+        
+        if(await usersDb.findOne({ xgmid: response.info.user.id })) {
+            message.reply(`пользователь \`${response.info.user.username}\` уже привязан к другому аккаунту Discord! :warning:`);
+            return;
+        }
+        
+        if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) !== UserTag(message.author)) {
+            message.reply(`пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: \`${UserTag(member.user)}\`\n<https://xgm.guru/profile>`);
+            return;
+        }
+        
+        await usersDb.insert({ _id: message.author.id, xgmid: response.info.user.id });
+        message.reply(`пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
+        AddRole(message.guild_id, message.author, config.role.user);
+        
+        if(response.info.user.seeTwilight)
+            AddRole(message.guild_id, message.author, config.role.twilight);
+    },
     
-    const removeReadOnly = (warnState.warns == maxWarns);
-    warnState.warns--;
+    whois: async message => {
+        if(!(message.mentions && message.mentions.length))
+            return;
+        
+        const userData = await usersDb.findOne({ _id: message.mentions[0].id });
+        if(userData)
+            message.reply(`https://xgm.guru/user/${userData.xgmid}`);
+        else
+            message.reply('пользователь не сопоставлен.');
+    },
     
-    if(warnState.warns > 0)
-        warnsDb.update({ _id: warnState._id }, { $set: { warns: warnState.warns, dt: now } });
-    else
-        warnsDb.remove({ _id: warnState._id });
+    warn: async message => {
+        if(!(message.mentions && message.mentions.length))
+            return;
+        
+        const server = await GetServer(message.guild_id);
+        if(!HasPermission(server, message.author, FLAGS.MANAGE_MESSAGES))
+            return;
+        
+        const userId = message.mentions[0].id;
+        if(userId == client.user.id)
+            return;
+        
+        const member = await GetMember(server, userId);
+        if(!member || HasPermission(server, member, FLAGS.MANAGE_MESSAGES))
+            return;
+        
+        const
+            warnState = await warnsDb.findOne({ _id: member.user.id }),
+            warns = warnState ? (warnState.warns + 1) : 0;
+        
+        await warnsDb.update({ _id: member.user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
+        
+        const pmChannel = await GetUserChannel(member.user);
+        SendMessage(message.channel_id, `Пользователь ${UserMention(member.user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
+        SendMessage(pmChannel, `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
+        
+        if(warns >= config.maxWarns) {
+            AddRole(server, member.user, config.role.readonly);
+            const time = Misc.FormatWarnTime(((warns - config.maxWarns) + 1) * warnPeriod);
+            SendMessage(message.channel_id, `Пользователь ${UserMention(message.author)} превысил лимит предупреждений и получили статус **Read only**! Истекает через: ${time}`);
+            SendMessage(pmChannel, `Вы превысили лимит предупреждений и получил статус **Read only**! Истекает через: ${time}`);
+        }
+    },
     
-    if(removeReadOnly) {
-        const member = await client.guilds.get(serverId).fetchMember(warnState._id, false);
-        if(member)
-            member.removeRole(readonlyRoleId);
-    }
-}
+    status: async message => {
+        if(!HasPermission(message.guild_id, message.author, FLAGS.MANAGE_MESSAGES))
+            return;
+        
+        const
+            warnStates = await warnsDb.find({}),
+            now = Date.now();
+        
+        let text = `**Нарушителей:** ${warnStates.length}\n\n`;
+        for(let i = 0; i < warnStates.length; i++) {
+            const
+                warnState = warnStates[i],
+                end = (warnState.warns < config.maxWarns) ? '\n' : `, в **Read only** на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - config.maxWarns + 1) * warnPeriod) - now)}`,
+                add = `${UserMention(warnState._id)}, нарушения ${warnState.warns}/${config.maxWarns}, снятие через ${Misc.FormatWarnTime(warnState.dt + warnPeriod - now)}${end}`;
+            
+            if(text.length + add.length < 2000) {
+                text += add;
+            } else {
+                await SendMessage(message.channel_id, text);
+                text = add;
+            }
+        }
+        
+        SendMessage(message.channel_id, text);
+    },
+};
 
-async function WarnTick() {
+const WarnTick = async () => {
     const warnStates = await warnsDb.find({});
     if(warnStates.length < 1)
         return;
     
     const now = Date.now();
-    for(let i = 0; i < warnStates.length; i++)
-        CheckWarn(warnStates[i], now);
-}
-
-async function ShowStatus(message) {
-    const author = await client.guilds.get(message.guild_id).fetchMember(message.author.id, false);
-    if(!author.hasPermission(Discord.Permissions.FLAGS.MANAGE_MESSAGES))
-        return;
-    
-    const
-        warnStates = await warnsDb.find({}),
-        now = Date.now();
-    
-    let answer = `Нарушителей: ${warnStates.length}`;
-    
     for(let i = 0; i < warnStates.length; i++) {
         const warnState = warnStates[i];
-        answer += `\n<@${warnState._id}>, нарушения ${warnState.warns}/${maxWarns}, снятие через ${Misc.FormatWarnTime(warnState.dt + warnPeriod - now)}`;
-        if(warnState.warns >= maxWarns)
-            answer += `, **в Read only на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - maxWarns + 1) * warnPeriod) - now)}**`;
-    }
-    
-    client.channels.get(message.channel_id).send(answer);
-}
-
-async function ReactionProc(reaction, add) {
-    const mark = await marksDb.findOne({ channel: reaction.channel_id, message: reaction.message_id, emoji: reaction.emoji.id });
-    if(!mark)
-        return;
-    
-    const member = await client.guilds.get(reaction.guild_id).fetchMember(reaction.user_id, false);
-    if(add)
-        member.addRole(mark.role);
-    else
-        member.removeRole(mark.role);
-}
-
-async function ReceiveReactionAdd(reaction) {
-    if(client.user.id != reaction.user_id)
-        ReactionProc(reaction, true);
-}
-
-async function ReceiveReactionRemove(reaction) {
-    ReactionProc(reaction, false);
-}
-
-async function SetMarks() {
-    let marks = await marksDb.find({});
-    for(let i = 0; i < marks.length; i++) {
-        const mark = marks[i];
-        await client.rest.methods.addMessageReaction({
-            channel: { id: mark.channel },
-            id: mark.message,
-            client: client,
-            _addReaction: () => {},
-        }, client.emojis.get(mark.emoji).identifier);
+        if((warnState.dt + warnPeriod) > now)
+            continue;
+        
+        warnState.warns--;
+        
+        if(warnState.warns > 0)
+            await warnsDb.update({ _id: warnState._id }, { $set: { warns: warnState.warns, dt: warnState.dt + warnPeriod } });
+        else
+            await warnsDb.remove({ _id: warnState._id });
+        
+        if(warnState.warns < config.maxWarns)
+            RemoveRole(config.server, warnState._id, config.role.readonly);
     }
 };
 
-const lastNewsDateParamName = 'lastNewsDate';
-let lastNewsDate;
-async function InitNews() {
-    const opt = await appDb.findOne({ _id: lastNewsDateParamName });
-    if(opt) {
-        lastNewsDate = opt.date;
-    } else {
-        lastNewsDate = Date.now();
-        await appDb.insert({ _id: lastNewsDateParamName, date: lastNewsDate });
-    }
-}
+const ReactionProc = async (reaction, add) => {
+    const mark = marks.find(elem => ((elem.channel == reaction.channel_id) && (elem.message == reaction.message_id) && (elem.emoji == reaction.emoji.id)));
+    if(mark)
+        (add ? AddRole : RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
+};
 
-async function CheckNews() {
-    if(client.status)
-        return;
+const SetMarks = async () => {
+    const
+        server = await GetServer(config.server),
+        emojis = new Map();
     
-    const feed = XmlParser.parse(Misc.Win1251ToUtf8(await request({ url: 'https://xgm.guru/rss', encoding: null })), { ignoreAttributes: false, attributeNamePrefix: '' });
-    if(!(feed.rss && feed.rss.channel && feed.rss.channel.item))
-        return;
+    for(let i = 0; i < server.emojis.length; i++) {
+        const emoji = server.emojis[i];
+        emojis.set(emoji.id, emoji);
+    }
     
-    const pubTime = new Date(feed.rss.channel.pubDate).getTime();
-    if(pubTime <= lastNewsDate)
-        return;
-    
-    for(let i = feed.rss.channel.item.length - 1; i >= 0; i--) {
+    for(let i = 0; i < marks.length; i++) {
         const
-            item = feed.rss.channel.item[i],
-            time = new Date(item.pubDate);
+            mark = marks[i],
+            emoji = emojis.get(mark.emoji);
         
-        if(time.getTime() > lastNewsDate) {
-            client.channels.get(newsChatId).send('', {
-                embed: {
-                    title: Misc.DecodeHtmlEntity(item.title),
-                    description: Misc.DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
-                    url: item.link,
-                    footer: { text: item.author },
-                    timestamp: time,
-                    color: 16764928,
-                    thumbnail: item.enclosure ? { url: item.enclosure.url } : null,
-                }
+        if(emoji) {
+            const t = `${emoji.name}:${emoji.id}`;
+            if((await GetReactions(mark.channel, mark.message, t)).length < 1)
+                await AddReaction(mark.channel, mark.message, t);
+        }
+    }
+};
+
+const appOptions = {
+    lastNewsTime: { _id: 'lastNewsTime' },
+};
+
+const CheckNews = async () => {
+    const feed = JSON.parse(await Misc.HttpsGet('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fxgm.guru%2Frss'));
+    if(!(feed && feed.items && feed.items.length))
+        return;
+    
+    const
+        option = await appDb.findOne(appOptions.lastNewsTime),
+        lastTime = option ? option.value : Date.now(),
+        items = feed.items;
+    
+    let maxTime = 0;
+    for(let i = items.length - 1; i >= 0; i--) {
+        const
+            item = items[i],
+            date = new Date(item.pubDate),
+            time = date.getTime();
+        
+        if(time > maxTime)
+            maxTime = time;
+        
+        if(time > lastTime) {
+            SendMessage(config.channel.news, '', {
+                title: Misc.DecodeHtmlEntity(item.title),
+                description: Misc.DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
+                url: item.link,
+                footer: { text: item.author },
+                timestamp: date,
+                color: 16764928,
+                thumbnail: item.enclosure ? { url: item.enclosure.link } : null,
             });
         }
     }
-    lastNewsDate = pubTime;
-    appDb.update({ _id: lastNewsDateParamName }, { $set: { date: lastNewsDate } });
-}
+    
+    if(lastTime != maxTime)
+        await appDb.update(appOptions.lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
+};
 
-client.on('raw', async (packet) => {
-    if(packet.t == 'MESSAGE_CREATE') {
-        ReceiveMessage(packet.d);
-    } else if(packet.t == 'MESSAGE_REACTION_ADD') {
-        ReceiveReactionAdd(packet.d);
-    } else if(packet.t == 'MESSAGE_REACTION_REMOVE') {
-        ReceiveReactionRemove(packet.d);
+const CheckTwilight = async (server, user, xgmid) => {
+    try {
+        const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+        if(response.info.user.seeTwilight && ((await GetMember(server, user)).roles.indexOf(config.role.twilight) < 0))
+            await AddRole(server, user, config.role.twilight);
+    } catch {}
+};
+
+const SyncTwilight = async () => {
+    const users = await usersDb.find({});
+    for(let i = 0; i < users.length; i++) {
+        const userInfo = users[i];
+        await CheckTwilight(config.server, userInfo._id, userInfo.xgmid);
     }
+};
+
+const events = {
+    READY: async data => {
+        client.user = data.user;
+        
+        SetMarks();
+        
+        WarnTick();
+        client.setInterval(WarnTick, 60000);
+        
+        CheckNews();
+        client.setInterval(CheckNews, 600000);
+        
+        SyncTwilight();
+        
+        console.log('READY');
+    },
+    
+    MESSAGE_CREATE: async message => {
+        if(!(message.content && message.guild_id))
+            return;
+        
+        if(message.author.id == client.user.id)
+            return;
+        
+        if(!message.content.startsWith(config.prefix))
+            return;
+        
+        const
+            si = message.content.search(/(\s|\n|$)/),
+            command = commands[message.content.substring(config.prefix.length, (si > 0) ? si : undefined).toLowerCase()];
+        
+        if(!command)
+            return;
+        
+        message.content = message.content.substring((si > 0) ? (si + 1) : '');
+        message.reply = content => SendMessage(message.channel_id, `${UserMention(message.author)}, ${content}`);
+        command(message);
+    },
+    
+    GUILD_MEMBER_ADD: async member => {
+        SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user)} присоединился к серверу.`);
+        
+        const warnState = await warnsDb.findOne({ _id: member.user.id });
+        if(warnState && (warnState.warns >= config.maxWarns))
+            AddRole(member.guild_id, member.user, config.role.readonly);
+        
+        const userInfo = await usersDb.findOne({ _id: member.user.id });
+        if(userInfo) {
+            AddRole(member.guild_id, member.user, config.role.user);
+            CheckTwilight(member.guild_id, member.user, userInfo.xgmid);
+        }
+    },
+    
+    GUILD_MEMBER_REMOVE: async member => {
+        SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user)} покинул сервер.`);
+    },
+    
+    MESSAGE_REACTION_ADD: async reaction => {
+        if(client.user.id != reaction.user_id)
+            ReactionProc(reaction, true);
+    },
+    
+    MESSAGE_REACTION_REMOVE: async reaction => {
+        if(client.user.id != reaction.user_id)
+            ReactionProc(reaction, false);
+    },
+};
+
+client.on('raw', async packet => {
+    const event = events[packet.t];
+    if(event)
+        event(packet.d);
 });
 
-async function NewMemberCheckRole(member) {
-    if(await usersDb.findOne({ _id: member.user.id }))
-        member.addRole(userRoleId);
-}
-
-async function NewMemberCheckWarns(member) {
-    const warnState = await warnsDb.findOne({ _id: member.user.id });
-    if(warnState && (warnState.warns >= maxWarns))
-        member.addRole(readonlyRoleId);
-}
-
-async function CheckTwilight(member) {
-    const userInfo = await usersDb.findOne({ _id: member.user.id });
-    if(!userInfo)
-        return;
-    
-    const response = JSON.parse(await request({ uri: `https://xgm.guru/api_user.php?id=${userInfo.xgmid}`, simple: false }));
-    if(response && response.info && response.info.user && response.info.user.seeTwilight)
-        member.addRole(twilightRoleId);
-}
-
-client.on('guildMemberAdd', async (member) => {
-    client.channels.get(logChatId).send(`<:zplus:544205514943365123> ${member.toString()} присоединился к серверу.`);
-    NewMemberCheckWarns(member);
-    NewMemberCheckRole(member);
-    CheckTwilight(member);
-});
-
-client.on('guildMemberRemove', async (member) => {
-    client.channels.get(logChatId).send(`<:zminus:544205486073839616> ${member.toString()} покинул сервер.`);
-});
-
-async function SyncTwilight() {
-    for(const member of client.guilds.get(serverId).members.values())
-        if(member.roles.has(userRoleId) && !member.roles.has(twilightRoleId))
-            await CheckTwilight(member);
-}
-
-client.on('ready', async () => {
-    await InitNews();
-    
-    SetMarks();
-    
-    WarnTick();
-    client.setInterval(WarnTick, 60000);
-    
-    CheckNews();
-    client.setInterval(CheckNews, 600000);
-    
-    SyncTwilight();
-    
-    console.log('READY');
-});
-
-client.login(process.env.TOKEN);
+client.manager.connectToWebSocket(process.env.TOKEN, () => {}, () => {});
