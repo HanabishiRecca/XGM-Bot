@@ -252,8 +252,7 @@ const CheckNews = async () => {
     for(let i = items.length - 1; i >= 0; i--) {
         const
             item = items[i],
-            date = new Date(item.pubDate),
-            time = date.getTime();
+            time = Date.parse(`${item.pubDate.replace(' ', 'T')}Z`);
         
         if(time > maxTime)
             maxTime = time;
@@ -264,7 +263,7 @@ const CheckNews = async () => {
                 description: Misc.DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
                 url: item.link,
                 footer: { text: item.author },
-                timestamp: date,
+                timestamp: new Date(time),
                 color: 16764928,
                 thumbnail: item.enclosure ? { url: item.enclosure.link } : null,
             });
