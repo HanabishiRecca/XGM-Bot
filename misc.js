@@ -1,7 +1,7 @@
 'use strict';
 
 const htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' };
-exports.DecodeHtmlEntity = str => str.replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
+exports.DecodeHtmlEntity = str => str.replace(/&amp;/g, '&').replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
 
 exports.FormatWarnTime = time => {
     let result = '';
