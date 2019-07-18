@@ -293,6 +293,11 @@ const SyncTwilight = async () => {
 
 const events = {
     READY: async data => {
+        console.log('READY');
+        
+        if(client.user)
+            return;
+        
         client.user = data.user;
         
         SetMarks();
@@ -304,8 +309,6 @@ const events = {
         client.setInterval(CheckNews, 600000);
         
         SyncTwilight();
-        
-        console.log('READY');
     },
     
     MESSAGE_CREATE: async message => {
