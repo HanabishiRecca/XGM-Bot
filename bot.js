@@ -11,6 +11,10 @@ const Shutdown = err => {
 if(!process.env.TOKEN)
     Shutdown('Token required.');
 
+const storagePath = process.env.STORAGE;
+if(!storagePath)
+    Shutdown('Storage path required.');
+
 const
     Database = require('nedb-promise'),
     Discord = require('discord.js'),
@@ -19,9 +23,9 @@ const
     marks = require('./marks.js').list;
 
 const
-    appDb = new Database({ filename: './storage/app.db', autoload: true }),
-    usersDb = new Database({ filename: './storage/users.db', autoload: true }),
-    warnsDb = new Database({ filename: './storage/warns.db', autoload: true });
+    appDb = new Database({ filename: `${storagePath}/app.db`, autoload: true }),
+    usersDb = new Database({ filename: `${storagePath}/users.db`, autoload: true }),
+    warnsDb = new Database({ filename: `${storagePath}/warns.db`, autoload: true });
 
 const client = new Discord.Client({
     disabledEvents: (() => {
