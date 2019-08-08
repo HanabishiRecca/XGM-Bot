@@ -305,7 +305,7 @@ const EchoMessage = async message => {
         timestamp: message.timestamp,
         author: {
             name: message.member.nick || message.author.username,
-            icon_url: `${CDN}/avatars/${message.author.id}/${message.author.avatar}`,
+            icon_url: message.author.avatar ? `${CDN}/avatars/${message.author.id}/${message.author.avatar}` : `${CDN}/embed/avatars/0.png`,
         },
         footer: {
             text: `#${(await GetChannel(message.channel_id)).name}`,
