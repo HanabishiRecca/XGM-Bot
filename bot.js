@@ -296,7 +296,7 @@ const SyncTwilight = async () => {
     }
 };
 
-const EchoMessage = async message => {
+const EchoMessage = async (message, edit) => {
     if(message.channel_id == config.channel.echo)
         return;
     
@@ -310,6 +310,7 @@ const EchoMessage = async message => {
         footer: {
             text: `#${(await GetChannel(message.channel_id)).name}`,
         },
+        title: edit ? '*(ред.)*' : null,
     });
 };
 
@@ -355,6 +356,16 @@ const events = {
         message.content = message.content.substring((si > 0) ? (si + 1) : '');
         message.reply = content => SendMessage(message.channel_id, `${UserMention(message.author)}, ${content}`);
         command(message);
+    },
+    
+    MESSAGE_UPDATE: async message => {
+        if(!(message.content && message.guild_id))
+            return;
+        
+        if(message.author.id == client.user.id)
+            return;
+        
+        EchoMessage(message, true);
     },
     
     GUILD_MEMBER_ADD: async member => {
