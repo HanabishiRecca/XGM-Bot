@@ -46,6 +46,7 @@ const
     warnPeriod = 86400000,
     Endpoints = Discord.Constants.Endpoints,
     FLAGS = Discord.Permissions.FLAGS,
+    CDN = Discord.Constants.DefaultOptions.http.cdn,
     UserMention = user => `<@${user.id || user}>`,
     UserTag = user => `${user.username}#${user.discriminator}`,
     GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
@@ -53,6 +54,7 @@ const
     AddRole = (server, user, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(user).Role(role), true),
     RemoveRole = (server, user, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(user).Role(role), true),
     SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
+    GetChannel = channel => client.rest.makeRequest('get', Endpoints.Channel(channel), true),
     GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
     AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
     GetReactions = (channel, message, emoji) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
@@ -130,7 +132,7 @@ const commands = {
             return;
         
         const server = await GetServer(message.guild_id);
-        if(!HasPermission(server, message.author, FLAGS.MANAGE_MESSAGES))
+        if(!HasPermission(server, message.member, FLAGS.MANAGE_MESSAGES))
             return;
         
         const userId = message.mentions[0].id;
@@ -160,7 +162,7 @@ const commands = {
     },
     
     status: async message => {
-        if(!HasPermission(message.guild_id, message.author, FLAGS.MANAGE_MESSAGES))
+        if(!HasPermission(message.guild_id, message.member, FLAGS.MANAGE_MESSAGES))
             return;
         
         const
@@ -294,6 +296,23 @@ const SyncTwilight = async () => {
     }
 };
 
+const EchoMessage = async message => {
+    if(message.channel_id == config.channel.echo)
+        return;
+    
+    SendMessage(config.channel.echo, '', {
+        description: message.content,
+        timestamp: message.timestamp,
+        author: {
+            name: message.member.nick || message.author.username,
+            icon_url: `${CDN}/avatars/${message.author.id}/${message.author.avatar}`,
+        },
+        footer: {
+            text: `#${(await GetChannel(message.channel_id)).name}`,
+        },
+    });
+};
+
 const events = {
     READY: async data => {
         console.log('READY');
@@ -320,6 +339,8 @@ const events = {
         
         if(message.author.id == client.user.id)
             return;
+        
+        EchoMessage(message, false);
         
         if(!message.content.startsWith(config.prefix))
             return;
