@@ -271,7 +271,7 @@ const CheckNews = async () => {
                 footer: { text: item.author },
                 timestamp: new Date(time),
                 color: 16764928,
-                thumbnail: item.enclosure ? { url: item.enclosure.link } : null,
+                image: item.enclosure ? { url: item.enclosure.link } : null,
             });
         }
     }
