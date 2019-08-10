@@ -329,7 +329,7 @@ const events = {
         client.setInterval(WarnTick, 60000);
         
         CheckNews();
-        client.setInterval(CheckNews, 600000);
+        client.setInterval(CheckNews, 3600000);
         
         SyncTwilight();
     },
