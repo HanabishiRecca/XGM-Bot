@@ -120,7 +120,7 @@ const commands = {
         if(!(message.mentions && message.mentions.length))
             return;
         
-        const userData = await usersDb.findOne({ _id: message.mentions[0].id });
+        const userData = await usersDb.findOne({ _id: message.mentions[0] });
         if(userData)
             message.reply(`https://xgm.guru/user/${userData.xgmid}`);
         else
@@ -135,7 +135,7 @@ const commands = {
         if(!HasPermission(server, message.member, FLAGS.MANAGE_MESSAGES))
             return;
         
-        const userId = message.mentions[0].id;
+        const userId = message.mentions[0];
         if(userId == client.user.id)
             return;
         
@@ -341,12 +341,8 @@ const events = {
         if(message.author.id == client.user.id)
             return;
         
-        if(message.guild_id) {
+        if(message.guild_id)
             EchoMessage(message, false);
-        } else {
-            message.guild_id = config.server;
-            message.member = await GetMember(config.server, message.author);
-        }
         
         if(!message.content.startsWith(config.prefix))
             return;
@@ -359,7 +355,15 @@ const events = {
             return;
         
         message.content = message.content.substring((si > 0) ? (si + 1) : '');
+        message.mentions = Misc.GetMentions(message.content);
         message.reply = content => SendMessage(message.channel_id, `${UserMention(message.author)}, ${content}`);
+        
+        if(!message.guild_id)
+            message.guild_id = config.server;
+        
+        if(!message.member)
+            message.member = await GetMember(config.server, message.author);
+        
         command(message);
     },
     

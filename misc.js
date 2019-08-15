@@ -49,3 +49,16 @@ exports.HttpsGet = url => new Promise(resolve => {
         });
     });
 });
+
+exports.GetMentions = str => {
+    const
+        result = [],
+        regExp = /<@!?([0-9]+)>/g;
+    
+    let match;
+    while(match = regExp.exec(str))
+        if(match.length > 1)
+            result.push(match[1]);
+    
+    return result;
+};
