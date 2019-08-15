@@ -335,13 +335,18 @@ const events = {
     },
     
     MESSAGE_CREATE: async message => {
-        if(!(message.content && message.guild_id))
+        if(!message.content)
             return;
         
         if(message.author.id == client.user.id)
             return;
         
-        EchoMessage(message, false);
+        if(message.guild_id) {
+            EchoMessage(message, false);
+        } else {
+            message.guild_id = config.server;
+            message.member = await GetMember(config.server, message.author);
+        }
         
         if(!message.content.startsWith(config.prefix))
             return;
