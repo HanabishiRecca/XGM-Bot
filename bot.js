@@ -47,6 +47,7 @@ const
     Endpoints = Discord.Constants.Endpoints,
     FLAGS = Discord.Permissions.FLAGS,
     CDN = Discord.Constants.DefaultOptions.http.cdn,
+    NoAvatar = `${CDN}/embed/avatars/0.png`,
     UserMention = user => `<@${user.id || user}>`,
     UserTag = user => `${user.username}#${user.discriminator}`,
     GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
@@ -77,41 +78,44 @@ const HasPermission = async (server, user, flag) => {
     return false;
 };
 
+const FormatWarn = (warnState, time) => {
+    const result = `Нарушения ${warnState.warns}/${config.maxWarns}, снятие через ${Misc.FormatWarnTime(warnState.dt + warnPeriod - time)}`;
+    return (warnState.warns < config.maxWarns) ? result : `${result}, в **Read only** на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - config.maxWarns + 1) * warnPeriod) - time)}`;
+};
+
 const commands = {
     verify: async message => {
-        const member = await GetMember(message.guild_id, message.author);
-        if(!member)
-            return;
-        
         if(await usersDb.findOne({ _id: message.author.id })) {
-            message.reply('аккаунт уже подтвержден.');
+            message.reply('Аккаунт уже подтвержден.');
             AddRole(message.guild_id, message.author, config.role.user);
             return;
         }
         
         const
-            username = message.content.trim() || member.nick || message.author.username,
+            username = message.content.trim() || (await GetMember(message.guild_id, message.author)).nick || message.author.username,
             response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?username=${encodeURIComponent(username)}`));
         
         if(!(response && response.info)) {
-            message.reply(`пользователь с именем \`${username}\` не зарегистрирован на сайте.`);
+            message.reply(`Пользователь с именем \`${username}\` не зарегистрирован на сайте.`);
             return;
         }
         
-        if(await usersDb.findOne({ xgmid: response.info.user.id })) {
-            message.reply(`пользователь \`${response.info.user.username}\` уже привязан к другому аккаунту Discord! :warning:`);
+        const xgmid = response.info.user.id;
+        if(await usersDb.findOne({ xgmid })) {
+            message.reply(`Пользователь \`${response.info.user.username}\` уже привязан к другому аккаунту Discord! :warning:`);
             return;
         }
         
         if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) !== UserTag(message.author)) {
-            message.reply(`пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: \`${UserTag(member.user)}\`\n<https://xgm.guru/profile>`);
+            message.reply(`Пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: \`${UserTag(message.author)}\`\n<https://xgm.guru/profile>`);
             return;
         }
         
-        await usersDb.insert({ _id: message.author.id, xgmid: response.info.user.id });
-        message.reply(`пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
-        AddRole(message.guild_id, message.author, config.role.user);
+        await usersDb.insert({ _id: message.author.id, xgmid });
+        message.reply(`Пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
+        SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(message.author)} → ID ${xgmid}`);
         
+        AddRole(message.guild_id, message.author, config.role.user);
         if(response.info.user.seeTwilight)
             AddRole(message.guild_id, message.author, config.role.twilight);
     },
@@ -121,10 +125,7 @@ const commands = {
             return;
         
         const userData = await usersDb.findOne({ _id: message.mentions[0] });
-        if(userData)
-            message.reply(`https://xgm.guru/user/${userData.xgmid}`);
-        else
-            message.reply('пользователь не сопоставлен.');
+        message.reply(userData ? `https://xgm.guru/user/${userData.xgmid}` : 'Пользователь не сопоставлен.');
     },
     
     warn: async message => {
@@ -147,21 +148,16 @@ const commands = {
             warnState = await warnsDb.findOne({ _id: member.user.id }),
             warns = warnState ? (warnState.warns + 1) : 0;
         
+        if(warns >= config.maxWarns)
+            AddRole(server, member.user, config.role.readonly);
+        
         await warnsDb.update({ _id: member.user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
         
-        const pmChannel = await GetUserChannel(member.user);
-        SendMessage(message.channel_id, `Пользователь ${UserMention(member.user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
-        SendMessage(pmChannel, `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
-        
-        if(warns >= config.maxWarns) {
-            AddRole(server, member.user, config.role.readonly);
-            const time = Misc.FormatWarnTime(((warns - config.maxWarns) + 1) * warnPeriod);
-            SendMessage(message.channel_id, `Пользователь ${UserMention(message.author)} превысил лимит предупреждений и получили статус **Read only**! Истекает через: ${time}`);
-            SendMessage(pmChannel, `Вы превысили лимит предупреждений и получил статус **Read only**! Истекает через: ${time}`);
-        }
+        SendMessage(config.channel.log, `Пользователь ${UserMention(member.user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
+        SendMessage(await GetUserChannel(member.user), `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
     },
     
-    status: async message => {
+    list: async message => {
         if(!HasPermission(message.guild_id, message.member, FLAGS.MANAGE_MESSAGES))
             return;
         
@@ -173,8 +169,7 @@ const commands = {
         for(let i = 0; i < warnStates.length; i++) {
             const
                 warnState = warnStates[i],
-                end = (warnState.warns < config.maxWarns) ? '\n' : `, в **Read only** на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - config.maxWarns + 1) * warnPeriod) - now)}`,
-                add = `${UserMention(warnState._id)}, нарушения ${warnState.warns}/${config.maxWarns}, снятие через ${Misc.FormatWarnTime(warnState.dt + warnPeriod - now)}${end}`;
+                add = `${UserMention(warnState._id)} → ${FormatWarn(warnState, now)}\n`;
             
             if(text.length + add.length < 2000) {
                 text += add;
@@ -185,6 +180,11 @@ const commands = {
         }
         
         SendMessage(message.channel_id, text);
+    },
+    
+    status: async message => {
+        const warnState = await warnsDb.findOne({ _id: message.author.id });
+        message.reply(warnState ? FormatWarn(warnState, Date.now()) : 'Нет нарушений.');
     },
 };
 
@@ -305,7 +305,7 @@ const EchoMessage = async (message, edit) => {
         timestamp: message.timestamp,
         author: {
             name: message.member.nick || message.author.username,
-            icon_url: message.author.avatar ? `${CDN}/avatars/${message.author.id}/${message.author.avatar}` : `${CDN}/embed/avatars/0.png`,
+            icon_url: message.author.avatar ? `${CDN}/avatars/${message.author.id}/${message.author.avatar}` : NoAvatar,
         },
         footer: {
             text: `#${(await GetChannel(message.channel_id)).name}`,
@@ -356,7 +356,7 @@ const events = {
         
         message.content = message.content.substring((si > 0) ? (si + 1) : '');
         message.mentions = Misc.GetMentions(message.content);
-        message.reply = content => SendMessage(message.channel_id, `${UserMention(message.author)}, ${content}`);
+        message.reply = content => SendMessage(message.channel_id, message.guild_id ? `${UserMention(message.author)}\n${content}` : content);
         
         if(!message.guild_id)
             message.guild_id = config.server;
