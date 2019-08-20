@@ -266,7 +266,7 @@ const CheckNews = async () => {
             maxTime = time;
         
         if(time > lastTime) {
-            SendMessage(config.channel.news, '', {
+            const embed = {
                 title: Misc.DecodeHtmlEntity(item.title),
                 description: Misc.DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
                 url: item.link,
@@ -274,7 +274,11 @@ const CheckNews = async () => {
                 timestamp: dt,
                 color: 16764928,
                 image: item.enclosure ? { url: item.enclosure.url } : null,
-            });
+            };
+            SendMessage(config.channel.news, '', embed);
+            
+            embed.timestamp = undefined;
+            SendMessage(config.channel.newsCode, `\`\`\`b/post\n${JSON.stringify({ content: 'https://discord.gg/TuSHPU6', embed }, null, 4)}\`\`\``);
         }
     }
     
