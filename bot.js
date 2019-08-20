@@ -18,6 +18,7 @@ if(!storagePath)
 const
     Database = require('nedb-promise'),
     Discord = require('discord.js'),
+    XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
     config = require('./config.json'),
     marks = require('./marks.js').list;
@@ -245,20 +246,21 @@ const appOptions = {
 };
 
 const CheckNews = async () => {
-    const feed = JSON.parse(await Misc.HttpsGet('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fxgm.guru%2Frss'));
-    if(!(feed && feed.items && feed.items.length))
+    const feed = XmlParser.parse(Misc.Win1251ToUtf8(await Misc.HttpsGet('https://xgm.guru/rss')), { ignoreAttributes: false, attributeNamePrefix: '' });
+    if(!(feed.rss && feed.rss.channel && feed.rss.channel.item))
         return;
     
     const
         option = await appDb.findOne(appOptions.lastNewsTime),
         lastTime = option ? option.value : Date.now(),
-        items = feed.items;
+        items = feed.rss.channel.item;
     
     let maxTime = 0;
     for(let i = items.length - 1; i >= 0; i--) {
         const
             item = items[i],
-            time = Date.parse(`${item.pubDate.replace(' ', 'T')}Z`);
+            dt = new Date(item.pubDate),
+            time = dt.getTime();
         
         if(time > maxTime)
             maxTime = time;
@@ -269,9 +271,9 @@ const CheckNews = async () => {
                 description: Misc.DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
                 url: item.link,
                 footer: { text: item.author },
-                timestamp: new Date(time),
+                timestamp: dt,
                 color: 16764928,
-                image: item.enclosure ? { url: item.enclosure.link } : null,
+                image: item.enclosure ? { url: item.enclosure.url } : null,
             });
         }
     }
@@ -329,7 +331,7 @@ const events = {
         client.setInterval(WarnTick, 60000);
         
         CheckNews();
-        client.setInterval(CheckNews, 3600000);
+        client.setInterval(CheckNews, 600000);
         
         SyncTwilight();
     },

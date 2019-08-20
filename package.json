@@ -10,6 +10,7 @@
     "main": "bot.js",
     "dependencies": {
         "discord.js": "^11.5.1",
+        "fast-xml-parser": "^3.12.20",
         "nedb-promise": "^2.0.1"
     }
 }
