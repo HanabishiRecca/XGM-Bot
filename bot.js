@@ -315,7 +315,7 @@ const EchoMessage = async (message, edit) => {
         description: message.content,
         timestamp: message.timestamp,
         author: {
-            name: message.member.nick || message.author.username,
+            name: (message.member && message.member.nick) ? message.member.nick : message.author.username,
             icon_url: message.author.avatar ? `${CDN}/avatars/${message.author.id}/${message.author.avatar}` : NoAvatar,
         },
         footer: {
