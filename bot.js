@@ -155,7 +155,7 @@ const commands = {
         
         const
             warnState = await warnsDb.findOne({ _id: user.id }),
-            warns = warnState ? (warnState.warns + 1) : 0;
+            warns = warnState ? (warnState.warns + 1) : 1;
         
         if(warns >= config.maxWarns)
             AddRole(server, user, config.role.readonly);
