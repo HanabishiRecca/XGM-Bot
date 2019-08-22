@@ -51,6 +51,7 @@ const
     NoAvatar = `${CDN}/embed/avatars/0.png`,
     UserMention = user => `<@${user.id || user}>`,
     UserTag = user => `${user.username}#${user.discriminator}`,
+    GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
     GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
     GetServer = server => client.rest.makeRequest('get', Endpoints.Guild(server), true),
     AddRole = (server, user, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(user).Role(role), true),
@@ -141,21 +142,25 @@ const commands = {
         if(userId == client.user.id)
             return;
         
+        const user = await GetUser(userId);
+        if(!user)
+            return;
+        
         const member = await GetMember(server, userId);
-        if(!member || HasPermission(server, member, FLAGS.MANAGE_MESSAGES))
+        if(member && HasPermission(server, member, FLAGS.MANAGE_MESSAGES))
             return;
         
         const
-            warnState = await warnsDb.findOne({ _id: member.user.id }),
+            warnState = await warnsDb.findOne({ _id: user.id }),
             warns = warnState ? (warnState.warns + 1) : 0;
         
         if(warns >= config.maxWarns)
-            AddRole(server, member.user, config.role.readonly);
+            AddRole(server, user, config.role.readonly);
         
-        await warnsDb.update({ _id: member.user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
+        await warnsDb.update({ _id: user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
         
-        SendMessage(config.channel.log, `Пользователь ${UserMention(member.user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
-        SendMessage(await GetUserChannel(member.user), `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
+        SendMessage(config.channel.log, `Пользователь ${UserMention(user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
+        SendMessage(await GetUserChannel(user), `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
     },
     
     list: async message => {
