@@ -23,6 +23,8 @@ exports.list = [
     //rubattle
     { channel: marksChannel, message: platformsMessage, role: '544572084974518272', emoji: '543780416822312960' },
     
+    //dota 2
+    { channel: marksChannel, message: platformsMessage, role: '614809606572736512', emoji: '614809363621740555' },
     
     //VERSIONS
     
