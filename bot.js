@@ -55,8 +55,8 @@ const
     GetUser = async userId => await SafeRequest('get', Endpoints.User(userId), true),
     GetMember = async (server, user) => await SafeRequest('get', Endpoints.Guild(server).Member(user), true),
     GetServer = async server => await SafeRequest('get', Endpoints.Guild(server), true),
-    AddRole = async (server, user, role) => await SafeRequest('put', Endpoints.Guild(server).Member(user).Role(role), true),
-    RemoveRole = async (server, user, role) => await SafeRequest('delete', Endpoints.Guild(server).Member(user).Role(role), true),
+    AddRole = async (server, member, role) => await SafeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
+    RemoveRole = async (server, member, role) => await SafeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
     SendMessage = async (channel, content, embed) => await SafeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
     GetChannel = async channel => await SafeRequest('get', Endpoints.Channel(channel), true),
     GetUserChannel = async user => await SafeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
@@ -64,11 +64,11 @@ const
     GetReactions = async (channel, message, emoji) => await SafeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
     CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag);
 
-const HasPermission = async (server, user, flag) => {
+const HasPermission = async (server, member, flag) => {
     if(!server.id)
         server = await GetServer(server);
     
-    const roles = user.roles || (await GetMember(server, user.id || user)).roles;
+    const roles = member.roles || (await GetMember(server, member.id)).roles;
     for(let i = 0; i < roles.length; i++) {
         const
             rid = roles[i],
