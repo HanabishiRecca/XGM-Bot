@@ -51,17 +51,17 @@ const
     NoAvatar = `${CDN}/embed/avatars/0.png`,
     UserMention = user => `<@${user.id || user}>`,
     UserTag = user => `${user.username}#${user.discriminator}`,
-    SafeRequest = async (method, url, auth, data, file, reason) => { try { return await client.rest.makeRequest.call(client.rest, method, url, auth, data, file, reason); } catch { return null; } },
-    GetUser = async userId => await SafeRequest('get', Endpoints.User(userId), true),
-    GetMember = async (server, user) => await SafeRequest('get', Endpoints.Guild(server).Member(user), true),
-    GetServer = async server => await SafeRequest('get', Endpoints.Guild(server), true),
-    AddRole = async (server, member, role) => await SafeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
-    RemoveRole = async (server, member, role) => await SafeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
-    SendMessage = async (channel, content, embed) => await SafeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
-    GetChannel = async channel => await SafeRequest('get', Endpoints.Channel(channel), true),
-    GetUserChannel = async user => await SafeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
-    AddReaction = async (channel, message, emoji) => await SafeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
-    GetReactions = async (channel, message, emoji) => await SafeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
+    SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null))),
+    GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
+    GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
+    GetServer = server => client.rest.makeRequest('get', Endpoints.Guild(server), true),
+    AddRole = (server, member, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
+    RemoveRole = (server, member, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
+    SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
+    GetChannel = channel => client.rest.makeRequest('get', Endpoints.Channel(channel), true),
+    GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
+    AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
+    GetReactions = (channel, message, emoji) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
     CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag);
 
 const HasPermission = async (server, member, flag) => {
@@ -143,13 +143,13 @@ const commands = {
         if(userId == client.user.id)
             return;
         
-        const user = await GetUser(userId);
+        const user = await SafePromise(GetUser(userId));
         if(!user) {
             message.reply('Указанный пользователь не существует.');
             return;
         }
         
-        const member = await GetMember(server, userId);
+        const member = await SafePromise(GetMember(server, userId));
         if(member && HasPermission(server, member, FLAGS.MANAGE_MESSAGES))
             return;
         
@@ -183,7 +183,7 @@ const commands = {
             if(text.length + add.length < 2000) {
                 text += add;
             } else {
-                await SendMessage(message.channel_id, text);
+                SendMessage(message.channel_id, text);
                 text = add;
             }
         }
