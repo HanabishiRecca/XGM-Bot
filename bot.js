@@ -343,6 +343,24 @@ const SaveMessage = async message => {
     }
 };
 
+const LoadMessage = async message => {
+    if(!mdbConnectionOptions)
+        return;
+    
+    let results;
+    const connection = await MariaDB.createConnection(mdbConnectionOptions);
+    try {
+        results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
+    } catch (err) {
+        console.error(err);
+    } finally {
+        connection.end();
+    }
+    
+    if(results && results.length)
+        return results[0];
+};
+
 const events = {
     READY: async data => {
         console.log('READY');
@@ -400,23 +418,10 @@ const events = {
     },
     
     MESSAGE_DELETE: async message => {
-        if(!mdbConnectionOptions)
+        const result = await LoadMessage(message);
+        if(!result)
             return;
         
-        let results;
-        const connection = await MariaDB.createConnection(mdbConnectionOptions);
-        try {
-            results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            connection.end();
-        }
-        
-        if(!(results && results.length))
-            return;
-        
-        const result = results[0];
         SendMessage(config.channel.log, '', {
             title: 'Сообщение удалено',
             fields: [
