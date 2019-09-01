@@ -403,7 +403,7 @@ const events = {
         let results;
         const connection = await MariaDB.createConnection(mdbConnectionOptions);
         try {
-            results = await connection.query('select user,text from messages where (id=?) limit 1;', [message.id]);
+            results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
         } catch (err) {
             console.error(err);
         } finally {
@@ -432,6 +432,7 @@ const events = {
                     value: result.text,
                 },
             ],
+            timestamp: new Date(result.dt),
         });
     },
     
