@@ -17,6 +17,7 @@ if(!storagePath)
 
 const
     Database = require('nedb-promise'),
+    MariaDB = require('mariadb'),
     Discord = require('discord.js'),
     XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
@@ -27,6 +28,14 @@ const
     appDb = new Database({ filename: `${storagePath}/app.db`, autoload: true }),
     usersDb = new Database({ filename: `${storagePath}/users.db`, autoload: true }),
     warnsDb = new Database({ filename: `${storagePath}/warns.db`, autoload: true });
+
+const mdbConnectionOptions = process.env.MDB_HOST ? {
+    host: process.env.MDB_HOST,
+    database: process.env.MDB_DATABASE,
+    user: process.env.MDB_USER,
+    password: process.env.MDB_PASSWORD,
+    bigNumberStrings: true,
+} : null;
 
 const client = new Discord.Client({
     disabledEvents: (() => {
@@ -47,10 +56,9 @@ const
     warnPeriod = 86400000,
     Endpoints = Discord.Constants.Endpoints,
     FLAGS = Discord.Permissions.FLAGS,
-    CDN = Discord.Constants.DefaultOptions.http.cdn,
-    NoAvatar = `${CDN}/embed/avatars/0.png`,
     UserMention = user => `<@${user.id || user}>`,
     UserTag = user => `${user.username}#${user.discriminator}`,
+    ChannelMention = channel => `<#${channel.id || channel}>`,
     SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null))),
     GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
     GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
@@ -58,7 +66,6 @@ const
     AddRole = (server, member, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
     RemoveRole = (server, member, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
     SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
-    GetChannel = channel => client.rest.makeRequest('get', Endpoints.Channel(channel), true),
     GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
     AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
     GetReactions = (channel, message, emoji) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
@@ -310,22 +317,27 @@ const SyncTwilight = async () => {
     }
 };
 
-const EchoMessage = async (message, edit) => {
-    if(message.channel_id == config.channel.echo)
+const SaveMessage = async message => {
+    if(!mdbConnectionOptions)
         return;
     
-    SendMessage(config.channel.echo, '', {
-        description: message.content,
-        timestamp: message.timestamp,
-        author: {
-            name: (message.member && message.member.nick) ? message.member.nick : message.author.username,
-            icon_url: message.author.avatar ? `${CDN}/avatars/${message.author.id}/${message.author.avatar}` : NoAvatar,
-        },
-        footer: {
-            text: `#${(await GetChannel(message.channel_id)).name}`,
-        },
-        title: edit ? '*(ред.)*' : null,
-    });
+    if(message.channel_id == config.channel.log)
+        return;
+    
+    if(!(message.content && message.guild_id))
+        return;
+    
+    if(message.author.id == client.user.id)
+        return;
+    
+    const connection = await MariaDB.createConnection(mdbConnectionOptions);
+    try {
+        await connection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content });
+    } catch (err) {
+        console.error(err);
+    } finally {
+        connection.end();
+    }
 };
 
 const events = {
@@ -355,8 +367,7 @@ const events = {
         if(message.author.id == client.user.id)
             return;
         
-        if(message.guild_id)
-            EchoMessage(message, false);
+        SaveMessage(message);
         
         if(!message.content.startsWith(config.prefix))
             return;
@@ -382,13 +393,46 @@ const events = {
     },
     
     MESSAGE_UPDATE: async message => {
-        if(!(message.content && message.guild_id))
+        SaveMessage(message);
+    },
+    
+    MESSAGE_DELETE: async message => {
+        if(!mdbConnectionOptions)
             return;
         
-        if(message.author.id == client.user.id)
+        let results;
+        const connection = await MariaDB.createConnection(mdbConnectionOptions);
+        try {
+            results = await connection.query('select user,text from messages where (id=?) limit 1;', [message.id]);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            connection.end();
+        }
+        
+        if(!(results && results.length))
             return;
         
-        EchoMessage(message, true);
+        const result = results[0];
+        SendMessage(config.channel.log, '', {
+            title: 'Сообщение удалено',
+            fields: [
+                {
+                    name: 'Автор',
+                    value: UserMention(result.user),
+                    inline: true,
+                },
+                {
+                    name: 'Канал',
+                    value: ChannelMention(message.channel_id),
+                    inline: true,
+                },
+                {
+                    name: 'Содержимое',
+                    value: result.text,
+                },
+            ],
+        });
     },
     
     GUILD_MEMBER_ADD: async member => {
