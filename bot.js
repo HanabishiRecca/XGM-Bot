@@ -15,6 +15,9 @@ const storagePath = process.env.STORAGE;
 if(!storagePath)
     Shutdown('Storage path required.');
 
+if(global.gc)
+    setInterval(global.gc, 3600000);
+
 const
     Database = require('nedb-promise'),
     MariaDB = require('mariadb'),
