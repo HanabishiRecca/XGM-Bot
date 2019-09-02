@@ -256,18 +256,15 @@ const ReactionProc = async (reaction, add) => {
         (add ? AddRole : RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
 };
 
-const SetMarks = async () => {
+const SetMarks = async serverEmojis => {
     if(MarkMessages.synced)
         return;
     
     MarkMessages.synced = true;
     
-    const
-        emojis = await client.rest.makeRequest('get', Endpoints.Guild(config.server).emojis, true),
-        emojiMap = new Map();
-    
-    for(let i = 0; i < emojis.length; i++) {
-        const emoji = emojis[i];
+    const emojiMap = new Map();
+    for(let i = 0; i < serverEmojis.length; i++) {
+        const emoji = serverEmojis[i];
         emojiMap.set(emoji.id, emoji);
     }
     
@@ -414,8 +411,9 @@ const events = {
         
         client.user = data.user;
         
+        let serverEmojis;
         const ClientReady = () => {
-            SetMarks();
+            SetMarks(serverEmojis);
             SyncTwilight();
             CheckNews();
             console.log('READY');
@@ -429,6 +427,9 @@ const events = {
         events.GUILD_CREATE = async server => {
             ServerUpdate(server);
             connected++;
+            
+            if(server.id == config.server)
+                serverEmojis = server.emojis;
             
             if(connected < serverCount)
                 return;
