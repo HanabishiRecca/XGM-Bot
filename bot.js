@@ -24,8 +24,7 @@ const
     Discord = require('discord.js'),
     XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
-    config = require('./config.json'),
-    marks = require('./marks.js').list;
+    config = require('./config.json');
 
 const
     appDb = new Database({ filename: `${storagePath}/app.db`, autoload: true }),
@@ -50,8 +49,8 @@ const client = new Discord.Client({
 });
 
 client.on('disconnect', Shutdown);
+client.on('reconnecting', () => console.warn('Reconnect'));
 client.on('error', () => console.error('Connection error!'));
-client.on('reconnecting', () => console.warn('Reconnecting...'));
 client.on('resume', () => console.warn('Connection restored'));
 client.on('rateLimit', () => console.warn('Rate limit!'));
 
@@ -59,26 +58,26 @@ const
     warnPeriod = 86400000,
     Endpoints = Discord.Constants.Endpoints,
     FLAGS = Discord.Permissions.FLAGS,
-    UserMention = user => `<@${user.id || user}>`,
-    UserTag = user => `${user.username}#${user.discriminator}`,
-    ChannelMention = channel => `<#${channel.id || channel}>`,
-    SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null))),
-    GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
-    GetMember = (server, user) => client.rest.makeRequest('get', Endpoints.Guild(server).Member(user), true),
-    GetServer = server => client.rest.makeRequest('get', Endpoints.Guild(server), true),
-    AddRole = (server, member, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
-    RemoveRole = (server, member, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
-    SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed }),
-    GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
+    ConnectedServers = new Map(),
+    SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null)));
+
+const
     AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
-    GetReactions = (channel, message, emoji) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message).Reaction(emoji), true),
-    CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag);
+    AddRole = (server, member, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
+    GetMessage = (channel, message) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message), true),
+    GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
+    GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
+    RemoveRole = (server, member, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
+    SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed });
+
+const
+    ChannelMention = channel => `<#${channel.id || channel}>`,
+    CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
+    ServerMember = (server, user) => server.members.find(member => member && (member.user.id == user.id)),
+    UserMention = user => `<@${user.id || user}>`;
 
 const HasPermission = async (server, member, flag) => {
-    if(!server.id)
-        server = await GetServer(server);
-    
-    const roles = member.roles || (await GetMember(server, member.id)).roles;
+    const roles = member.roles;
     for(let i = 0; i < roles.length; i++) {
         const
             rid = roles[i],
@@ -100,12 +99,12 @@ const commands = {
     verify: async message => {
         if(await usersDb.findOne({ _id: message.author.id })) {
             message.reply('Аккаунт уже подтвержден.');
-            AddRole(message.guild_id, message.author, config.role.user);
+            AddRole(message.server, message.member, config.role.user);
             return;
         }
         
         const
-            username = message.content.trim() || (await GetMember(message.guild_id, message.author)).nick || message.author.username,
+            username = message.content.trim() || ServerMember(message.server, message.author).nick || message.author.username,
             response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?username=${encodeURIComponent(username)}`));
         
         if(!(response && response.info)) {
@@ -119,8 +118,8 @@ const commands = {
             return;
         }
         
-        if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) !== UserTag(message.author)) {
-            message.reply(`Пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: \`${UserTag(message.author)}\`\n<https://xgm.guru/profile>`);
+        if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) !== `${message.author.username}#${message.author.discriminator}`) {
+            message.reply(`Пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: **${message.author.username}**\`#${message.author.discriminator}\`\n<https://xgm.guru/profile>`);
             return;
         }
         
@@ -128,9 +127,9 @@ const commands = {
         message.reply(`Пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
         SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(message.author)} → ID ${xgmid}`);
         
-        AddRole(message.guild_id, message.author, config.role.user);
+        AddRole(message.server, message.member, config.role.user);
         if(response.info.user.seeTwilight)
-            AddRole(message.guild_id, message.author, config.role.twilight);
+            AddRole(message.server, message.member, config.role.twilight);
     },
     
     whois: async message => {
@@ -145,8 +144,7 @@ const commands = {
         if(!(message.mentions && message.mentions.length))
             return;
         
-        const server = await GetServer(message.guild_id);
-        if(!HasPermission(server, message.member, FLAGS.MANAGE_MESSAGES))
+        if(!HasPermission(message.server, message.member, FLAGS.MANAGE_MESSAGES))
             return;
         
         const userId = message.mentions[0];
@@ -159,8 +157,8 @@ const commands = {
             return;
         }
         
-        const member = await SafePromise(GetMember(server, userId));
-        if(member && HasPermission(server, member, FLAGS.MANAGE_MESSAGES))
+        const member = ServerMember(message.server, user);
+        if(member && HasPermission(message.server, member, FLAGS.MANAGE_MESSAGES))
             return;
         
         const
@@ -168,7 +166,7 @@ const commands = {
             warns = warnState ? (warnState.warns + 1) : 1;
         
         if(warns >= config.maxWarns)
-            AddRole(server, user, config.role.readonly);
+            AddRole(message.server, user, config.role.readonly);
         
         await warnsDb.update({ _id: user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
         
@@ -177,7 +175,7 @@ const commands = {
     },
     
     list: async message => {
-        if(!HasPermission(message.guild_id, message.member, FLAGS.MANAGE_MESSAGES))
+        if(!HasPermission(message.server, message.member, FLAGS.MANAGE_MESSAGES))
             return;
         
         const
@@ -230,31 +228,61 @@ const WarnTick = async () => {
     }
 };
 
+client.setInterval(WarnTick, 60000);
+
+const MarkMessages = (() => {
+    const
+        list = require('./marks.js').list,
+        msgs = new Map();
+    
+    for(let i = 0; i < list.length; i++) {
+        const mark = list[i];
+        if(msgs.has(mark.message))
+            msgs.get(mark.message).marks.push(mark);
+        else
+            msgs.set(mark.message, { id: mark.message, channel: mark.channel, marks: [mark] });
+    }
+    
+    return msgs;
+})();
+
 const ReactionProc = async (reaction, add) => {
-    const mark = marks.find(elem => ((elem.channel == reaction.channel_id) && (elem.message == reaction.message_id) && (elem.emoji == reaction.emoji.id)));
+    const msg = MarkMessages.get(reaction.message_id);
+    if(!msg)
+        return;
+    
+    const mark = msg.marks.find(elem => elem.emoji == reaction.emoji.id);
     if(mark)
         (add ? AddRole : RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
 };
 
 const SetMarks = async () => {
-    const
-        server = await GetServer(config.server),
-        emojis = new Map();
+    if(MarkMessages.synced)
+        return;
     
-    for(let i = 0; i < server.emojis.length; i++) {
-        const emoji = server.emojis[i];
-        emojis.set(emoji.id, emoji);
+    MarkMessages.synced = true;
+    
+    const
+        emojis = await client.rest.makeRequest('get', Endpoints.Guild(config.server).emojis, true),
+        emojiMap = new Map();
+    
+    for(let i = 0; i < emojis.length; i++) {
+        const emoji = emojis[i];
+        emojiMap.set(emoji.id, emoji);
     }
     
-    for(let i = 0; i < marks.length; i++) {
-        const
-            mark = marks[i],
-            emoji = emojis.get(mark.emoji);
+    for(const msg of MarkMessages.values()) {
+        const message = await GetMessage(msg.channel, msg.id);
+        if(!message)
+            continue;
         
-        if(emoji) {
-            const t = `${emoji.name}:${emoji.id}`;
-            if((await GetReactions(mark.channel, mark.message, t)).length < 1)
-                await AddReaction(mark.channel, mark.message, t);
+        for(let i = 0; i < msg.marks.length; i++) {
+            const mark = msg.marks[i];
+            if(message.reactions.find(elem => elem.emoji.id == mark.emoji))
+                continue;
+            
+            const emoji = emojiMap.get(mark.emoji);
+            await AddReaction(message.channel_id, message.id, `${emoji.name}:${emoji.id}`);
         }
     }
 };
@@ -304,21 +332,32 @@ const CheckNews = async () => {
         await appDb.update(appOptions.lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
 };
 
-const CheckTwilight = async (server, user, xgmid) => {
+client.setInterval(CheckNews, 600000);
+
+const CheckTwilight = async (server, member, xgmid) => {
     try {
         const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
-        if(response.info.user.seeTwilight && ((await GetMember(server, user)).roles.indexOf(config.role.twilight) < 0))
-            await AddRole(server, user, config.role.twilight);
+        if(response.info.user.seeTwilight && (member.roles.indexOf(config.role.twilight) < 0))
+            await AddRole(server, member, config.role.twilight);
     } catch {}
 };
 
 const SyncTwilight = async () => {
-    const users = await usersDb.find({});
+    const
+        server = ConnectedServers.get(config.server),
+        users = await usersDb.find({});
+    
     for(let i = 0; i < users.length; i++) {
-        const userInfo = users[i];
-        await CheckTwilight(config.server, userInfo._id, userInfo.xgmid);
+        const
+            userInfo = users[i],
+            member = ServerMember(server, { id: userInfo._id });
+        
+        if(member)
+            await CheckTwilight(server, member, userInfo.xgmid);
     }
 };
+
+client.setInterval(SyncTwilight, 3600000);
 
 const SaveMessage = async message => {
     if(!mdbConnectionOptions)
@@ -361,24 +400,42 @@ const LoadMessage = async message => {
         return results[0];
 };
 
+const ServerUpdate = server => {
+    ConnectedServers.set(server.id, {
+        id: server.id,
+        roles: server.roles,
+        members: server.members,
+    });
+};
+
 const events = {
     READY: async data => {
-        console.log('READY');
-        
-        if(client.user)
-            return;
+        console.log('INIT');
         
         client.user = data.user;
         
-        SetMarks();
+        const ClientReady = () => {
+            SetMarks();
+            SyncTwilight();
+            CheckNews();
+            console.log('READY');
+        };
         
-        WarnTick();
-        client.setInterval(WarnTick, 60000);
+        const
+            serverCount = data.guilds.length,
+            origFunc = events.GUILD_CREATE;
         
-        CheckNews();
-        client.setInterval(CheckNews, 600000);
-        
-        SyncTwilight();
+        let connected = 0;
+        events.GUILD_CREATE = async server => {
+            ServerUpdate(server);
+            connected++;
+            
+            if(connected < serverCount)
+                return;
+            
+            events.GUILD_CREATE = origFunc;
+            ClientReady();
+        };
     },
     
     MESSAGE_CREATE: async message => {
@@ -404,11 +461,10 @@ const events = {
         message.mentions = Misc.GetMentions(message.content);
         message.reply = content => SendMessage(message.channel_id, message.guild_id ? `${UserMention(message.author)}\n${content}` : content);
         
-        if(!message.guild_id)
-            message.guild_id = config.server;
+        message.server = ConnectedServers.get(message.guild_id) || ConnectedServers.get(config.server);
         
         if(!message.member)
-            message.member = await GetMember(config.server, message.author);
+            message.member = ServerMember(message.server, message.author);
         
         command(message);
     },
@@ -456,10 +512,19 @@ const events = {
             AddRole(member.guild_id, member.user, config.role.user);
             CheckTwilight(member.guild_id, member.user, userInfo.xgmid);
         }
+        
+        ConnectedServers.get(member.guild_id).members.unshift(member);
     },
     
     GUILD_MEMBER_REMOVE: async member => {
         SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user)} покинул сервер.`);
+        
+        const
+            members = ConnectedServers.get(member.guild_id).members,
+            index = members.findIndex(elem => elem && (elem.user.id == member.user.id));
+        
+        if(index > -1)
+            members[index] = null;
     },
     
     MESSAGE_REACTION_ADD: async reaction => {
@@ -470,6 +535,18 @@ const events = {
     MESSAGE_REACTION_REMOVE: async reaction => {
         if(client.user.id != reaction.user_id)
             ReactionProc(reaction, false);
+    },
+    
+    GUILD_CREATE: async server => {
+        ServerUpdate(server);
+    },
+    
+    GUILD_UPDATE: async server => {
+        ServerUpdate(server);
+    },
+    
+    GUILD_DELETE: async server => {
+        ConnectedServers.delete(server.id);
     },
 };
 
