@@ -475,11 +475,14 @@ const events = {
     },
     
     MESSAGE_DELETE: async message => {
+        if(message.channel_id == config.channel.deleted)
+            return;
+        
         const result = await LoadMessage(message);
         if(!result)
             return;
         
-        SendMessage(config.channel.log, '', {
+        SendMessage(config.channel.deleted, '', {
             title: 'Сообщение удалено',
             fields: [
                 {
