@@ -96,6 +96,22 @@ const FormatWarn = (warnState, time) => {
 };
 
 const commands = {
+    help: async message => {
+        SendMessage(message.channel_id, `**Справка**
+
+**Команды для всех**
+\`verify [username]\` - привязать текущий аккаунт Discord к аккаунту на сайте XGM. Опционально можно указать имя пользователя на сайте, если оно не совпадает с текущим никнеймом.
+\`whois @user\` - получить информацию о привязке указанного пользователя.
+\`status\` - узнать свой статус предупреждений.
+\`help\` - показать данное сообщение.
+
+**Команды для модераторов**
+\`warn @user\` - выдать предупреждение указанному пользователю.
+\`list\` - показать список нарушителей.
+
+*Команды можно отправлять боту в ЛС.*`);
+    },
+    
     verify: async message => {
         if(await usersDb.findOne({ _id: message.author.id })) {
             message.reply('Аккаунт уже подтвержден.');
@@ -201,7 +217,7 @@ const commands = {
     
     status: async message => {
         const warnState = await warnsDb.findOne({ _id: message.author.id });
-        message.reply(warnState ? FormatWarn(warnState, Date.now()) : 'Нет нарушений.');
+        message.reply(warnState ? FormatWarn(warnState, Date.now()) : 'Нет предупреждений.');
     },
 };
 
@@ -410,6 +426,7 @@ const events = {
         console.log('INIT');
         
         client.user = data.user;
+        client.ws.send({ op: 3, d: { status: { web: 'online' }, game: { name: '/help', type: 3 }, afk: false, since: 0 } });
         
         let serverEmojis;
         const ClientReady = () => {
