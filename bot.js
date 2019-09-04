@@ -427,6 +427,8 @@ const events = {
     READY: async data => {
         console.log('INIT');
         
+        ConnectedServers.clear();
+        
         client.user = data.user;
         client.ws.send({ op: 3, d: { status: { web: 'online' }, game: { name: '/help', type: 3 }, afk: false, since: 0 } });
         
