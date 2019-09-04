@@ -1,5 +1,7 @@
 'use strict';
 
+require('./log.js');
+
 process.on('uncaughtException', console.error);
 process.on('unhandledRejection', console.error);
 
