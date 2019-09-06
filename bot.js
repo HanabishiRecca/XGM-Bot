@@ -78,7 +78,7 @@ const
     ServerMember = (server, user) => server.members.find(member => member && (member.user.id == user.id)),
     UserMention = user => `<@${user.id || user}>`;
 
-const HasPermission = async (server, member, flag) => {
+const HasPermission = (server, member, flag) => {
     const roles = member.roles;
     for(let i = 0; i < roles.length; i++) {
         const
@@ -88,7 +88,6 @@ const HasPermission = async (server, member, flag) => {
         if(role && CheckPermission(role.permissions, flag))
             return true;
     }
-    
     return false;
 };
 
