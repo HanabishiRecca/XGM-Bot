@@ -96,7 +96,7 @@ const FormatWarn = (warnState, time) => {
     return (warnState.warns < config.maxWarns) ? result : `${result}, в **Read only** на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - config.maxWarns + 1) * warnPeriod) - time)}`;
 };
 
-const commands = {
+const botCommands = {
     help: async message => {
         SendMessage(message.channel_id, `**Справка**
 
@@ -473,9 +473,9 @@ const events = {
         
         const
             si = message.content.search(/(\s|\n|$)/),
-            command = commands[message.content.substring(config.prefix.length, (si > 0) ? si : undefined).toLowerCase()];
+            command = message.content.substring(config.prefix.length, (si > 0) ? si : undefined).toLowerCase();
         
-        if(!command)
+        if(!(command && botCommands.hasOwnProperty(command)))
             return;
         
         message.content = message.content.substring((si > 0) ? (si + 1) : '');
@@ -487,7 +487,7 @@ const events = {
         if(!message.member)
             message.member = ServerMember(message.server, message.author);
         
-        command(message);
+        botCommands[command](message);
     },
     
     MESSAGE_UPDATE: async message => {
