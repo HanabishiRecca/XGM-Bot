@@ -487,6 +487,7 @@ const events = {
         if(!message.member)
             message.member = ServerMember(message.server, message.author);
         
+        console.log(`COMMAND (${command}) ARG (${message.content}) SERVER (${message.server.name}) USER (${message.author.username}#${message.author.discriminator})`);
         botCommands[command](message);
     },
     
