@@ -414,7 +414,7 @@ const LoadMessage = async message => {
         return results[0];
 };
 
-const ServerUpdate = server => {
+const AddServer = server => {
     ConnectedServers.set(server.id, {
         id: server.id,
         roles: server.roles,
@@ -445,7 +445,7 @@ const events = {
         
         let connected = 0;
         events.GUILD_CREATE = async server => {
-            ServerUpdate(server);
+            AddServer(server);
             connected++;
             
             if(server.id == config.server)
@@ -563,11 +563,12 @@ const events = {
     },
     
     GUILD_CREATE: async server => {
-        ServerUpdate(server);
+        AddServer(server);
     },
     
     GUILD_UPDATE: async server => {
-        ServerUpdate(server);
+        const sobj = ConnectedServers.get(server.id);
+        sobj.roles = server.roles;
     },
     
     GUILD_DELETE: async server => {
