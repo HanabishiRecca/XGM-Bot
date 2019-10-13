@@ -65,7 +65,7 @@ const
 
 const
     AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
-    AddRole = (server, member, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(member).Role(role), true),
+    AddRole = (server, user, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(user).Role(role), true),
     GetMessage = (channel, message) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message), true),
     GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
     GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
@@ -116,7 +116,7 @@ const botCommands = {
     verify: async message => {
         if(await usersDb.findOne({ _id: message.author.id })) {
             message.reply('Аккаунт уже подтвержден.');
-            AddRole(message.server, message.member, config.role.user);
+            AddRole(message.server, message.member.user, config.role.user);
             return;
         }
         
@@ -144,9 +144,9 @@ const botCommands = {
         message.reply(`Пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
         SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(message.author)} → ID ${xgmid}`);
         
-        AddRole(message.server, message.member, config.role.user);
+        AddRole(message.server, message.member.user, config.role.user);
         if(response.info.user.seeTwilight)
-            AddRole(message.server, message.member, config.role.twilight);
+            AddRole(message.server, message.member.user, config.role.twilight);
     },
     
     whois: async message => {
@@ -352,7 +352,7 @@ const CheckTwilight = async (server, member, xgmid) => {
     try {
         const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
         if(response.info.user.seeTwilight && (member.roles.indexOf(config.role.twilight) < 0))
-            await AddRole(server, member, config.role.twilight);
+            await AddRole(server, member.user, config.role.twilight);
     } catch {}
 };
 
