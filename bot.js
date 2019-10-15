@@ -116,7 +116,7 @@ const botCommands = {
     verify: async message => {
         if(await usersDb.findOne({ _id: message.author.id })) {
             message.reply('Аккаунт уже подтвержден.');
-            AddRole(message.server, message.member.user, config.role.user);
+            AddRole(message.server, message.author, config.role.user);
             return;
         }
         
@@ -144,9 +144,9 @@ const botCommands = {
         message.reply(`Пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
         SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(message.author)} → ID ${xgmid}`);
         
-        AddRole(message.server, message.member.user, config.role.user);
+        AddRole(message.server, message.author, config.role.user);
         if(response.info.user.seeTwilight)
-            AddRole(message.server, message.member.user, config.role.twilight);
+            AddRole(message.server, message.author, config.role.twilight);
     },
     
     whois: async message => {
