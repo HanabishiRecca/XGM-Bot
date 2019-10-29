@@ -424,39 +424,18 @@ const AddServer = server => {
 
 const events = {
     READY: async data => {
-        console.log('INIT');
-        
-        ConnectedServers.clear();
-        
         client.user = data.user;
         client.ws.send({ op: 3, d: { status: { web: 'online' }, game: { name: '/help', type: 3 }, afk: false, since: 0 } });
         
-        let serverEmojis;
-        const ClientReady = () => {
-            SetMarks(serverEmojis);
-            SyncTwilight();
-            CheckNews();
-            console.log('READY');
-        };
+        ConnectedServers.clear();
         
-        const
-            serverCount = data.guilds.length,
-            origFunc = events.GUILD_CREATE;
+        const servers = data.guilds;
+        for(let i = 0; i < servers.length; i++) {
+            const server = servers[i];
+            ConnectedServers.set(server.id, server);
+        }
         
-        let connected = 0;
-        events.GUILD_CREATE = async server => {
-            AddServer(server);
-            connected++;
-            
-            if(server.id == config.server)
-                serverEmojis = server.emojis;
-            
-            if(connected < serverCount)
-                return;
-            
-            events.GUILD_CREATE = origFunc;
-            ClientReady();
-        };
+        console.log('READY');
     },
     
     MESSAGE_CREATE: async message => {
@@ -564,6 +543,13 @@ const events = {
     
     GUILD_CREATE: async server => {
         AddServer(server);
+        
+        if(server.id != config.server)
+            return;
+        
+        SetMarks(server.emojis);
+        SyncTwilight();
+        CheckNews();
     },
     
     GUILD_UPDATE: async server => {
