@@ -497,7 +497,7 @@ const events = {
                 },
                 {
                     name: 'Содержимое',
-                    value: result.text,
+                    value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
                 },
             ],
             timestamp: new Date(result.dt),
