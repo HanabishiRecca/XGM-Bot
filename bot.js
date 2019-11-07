@@ -349,11 +349,17 @@ const CheckNews = async () => {
 client.setInterval(CheckNews, 600000);
 
 const CheckTwilight = async (server, member, xgmid) => {
-    try {
-        const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
-        if(response.info.user.seeTwilight && (member.roles.indexOf(config.role.twilight) < 0))
+    const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+    if(!response)
+        return;
+    
+    if(response.info.user.seeTwilight) {
+        if(member.roles.indexOf(config.role.twilight) < 0)
             await AddRole(server, member.user, config.role.twilight);
-    } catch {}
+    } else {
+        if(member.roles.indexOf(config.role.twilight) > -1)
+            await RemoveRole(server, member.user, config.role.twilight);
+    }
 };
 
 const SyncTwilight = async () => {
@@ -484,8 +490,7 @@ const events = {
         
         SendMessage(config.channel.deleted, '', {
             title: 'Сообщение удалено',
-            fields: [
-                {
+            fields: [{
                     name: 'Автор',
                     value: UserMention(result.user),
                     inline: true,
