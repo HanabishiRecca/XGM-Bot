@@ -76,6 +76,7 @@ const
     ChannelMention = channel => `<#${channel.id || channel}>`,
     CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
     ServerMember = (server, user) => server.members.find(member => member && (member.user.id == user.id)),
+    ServerMemberIndex = (server, user) => server.members.findIndex(member => member && (member.user.id == user.id)),
     UserMention = user => `<@${user.id || user}>`;
 
 const HasPermission = (server, member, flag) => {
@@ -534,6 +535,14 @@ const events = {
         
         if(index > -1)
             members[index] = null;
+    },
+    
+    GUILD_MEMBER_UPDATE: async member => {
+        const
+            server = ConnectedServers.get(member.guild_id),
+            index = ServerMemberIndex(server, member.user.id);
+        
+        server.members[index] = member;
     },
     
     MESSAGE_REACTION_ADD: async reaction => {
