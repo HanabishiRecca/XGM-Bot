@@ -10,8 +10,8 @@
     "main": "bot.js",
     "dependencies": {
         "discord.js": "^11.5.1",
-        "fast-xml-parser": "^3.12.20",
-        "mariadb": "^2.1.0",
+        "fast-xml-parser": "^3.15.1",
+        "mariadb": "^2.1.4",
         "nedb-promise": "^2.0.1"
     }
 }
