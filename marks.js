@@ -33,4 +33,7 @@ exports.list = [
     
     //1.30
     { channel: marksChannel, message: versionsMessage, role: '544583994860240955', emoji: '544587950449754132' },
+    
+    //reforged
+    { channel: marksChannel, message: versionsMessage, role: '659464540513370128', emoji: '659463638507192381' },
 ];
