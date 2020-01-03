@@ -60,6 +60,7 @@ const
     warnPeriod = 86400000,
     Endpoints = Discord.Constants.Endpoints,
     FLAGS = Discord.Permissions.FLAGS,
+    HOST = Discord.Constants.DefaultOptions.http.host,
     ConnectedServers = new Map(),
     SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null)));
 
@@ -384,13 +385,7 @@ const SaveMessage = async message => {
     if(!mdbConnectionOptions)
         return;
     
-    if(message.channel_id == config.channel.log)
-        return;
-    
     if(!(message.content && message.guild_id))
-        return;
-    
-    if(message.author.id == client.user.id)
         return;
     
     const connection = await MariaDB.createConnection(mdbConnectionOptions);
@@ -478,13 +473,45 @@ const events = {
     },
     
     MESSAGE_UPDATE: async message => {
+        if(!message.author)
+            return;
+        
+        if(message.author.id == client.user.id)
+            return;
+        
+        const result = await LoadMessage(message);
+        
         SaveMessage(message);
+        
+        if(!result)
+            return;
+        
+        SendMessage(config.channel.deleted, '', {
+            title: 'Сообщение изменено',
+            fields: [{
+                    name: 'Автор',
+                    value: UserMention(result.user),
+                    inline: true,
+                },
+                {
+                    name: 'Канал',
+                    value: ChannelMention(message.channel_id),
+                    inline: true,
+                },
+                {
+                    name: 'Содержимое',
+                    value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
+                },
+                {
+                    name: 'Переход',
+                    value: `${HOST}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
+                },
+            ],
+            timestamp: new Date(result.dt),
+        });
     },
     
     MESSAGE_DELETE: async message => {
-        if(message.channel_id == config.channel.deleted)
-            return;
-        
         const result = await LoadMessage(message);
         if(!result)
             return;
