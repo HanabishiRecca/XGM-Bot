@@ -185,7 +185,7 @@ const botCommands = {
             warns = warnState ? (warnState.warns + 1) : 1;
         
         if(warns >= config.maxWarns)
-            AddRole(message.server, user, config.role.readonly);
+            SafePromise(AddRole(message.server, user, config.role.readonly));
         
         await warnsDb.update({ _id: user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
         
@@ -243,7 +243,7 @@ const WarnTick = async () => {
             await warnsDb.remove({ _id: warnState._id });
         
         if(warnState.warns < config.maxWarns)
-            RemoveRole(config.server, warnState._id, config.role.readonly);
+            SafePromise(RemoveRole(config.server, warnState._id, config.role.readonly));
     }
 };
 
