@@ -308,7 +308,11 @@ const appOptions = {
 };
 
 const CheckNews = async () => {
-    const feed = XmlParser.parse(Misc.Win1251ToUtf8(await Misc.HttpsGet('https://xgm.guru/rss')), { ignoreAttributes: false, attributeNamePrefix: '' });
+    const data = await Misc.HttpsGet('https://xgm.guru/rss');
+    if(!(data && data.length))
+        return;
+    
+    const feed = XmlParser.parse(Misc.Win1251ToUtf8(data), { ignoreAttributes: false, attributeNamePrefix: '' });
     if(!(feed.rss && feed.rss.channel && feed.rss.channel.item))
         return;
     

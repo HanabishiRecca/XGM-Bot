@@ -70,7 +70,7 @@ const win1251chars = (() => {
     return result + 'ЂЃ‚ѓ„…†‡€‰Љ‹ЊЌЋЏђ‘’“”•–— ™љ›њќћџ ЎўЈ¤Ґ¦§Ё©Є«¬­®Ї°±Ііґµ¶·ё№є»јЅѕїАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя';
 })();
 
-exports.Win1251ToUtf8 = (data) => {
+exports.Win1251ToUtf8 = data => {
     let result = '';
     for(let i = 0; i < data.length; i++)
         result += win1251chars[data[i]];
