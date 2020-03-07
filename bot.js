@@ -23,7 +23,7 @@ if(global.gc)
 const
     Database = require('nedb-promise'),
     MariaDB = require('mariadb'),
-    Discord = require('discord.js'),
+    Discord = require('./discordlite'),
     XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
     config = require('./config.json');
@@ -33,45 +33,35 @@ const
     usersDb = new Database({ filename: `${storagePath}/users.db`, autoload: true }),
     warnsDb = new Database({ filename: `${storagePath}/warns.db`, autoload: true });
 
-const mdbConnectionOptions = process.env.MDB_HOST ? {
+const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE && process.env.MDB_USER && process.env.MDB_PASSWORD) ? {
     host: process.env.MDB_HOST,
     database: process.env.MDB_DATABASE,
     user: process.env.MDB_USER,
     password: process.env.MDB_PASSWORD,
     bigNumberStrings: true,
-} : null;
+} : undefined;
 
-const client = new Discord.Client({
-    disabledEvents: (() => {
-        const events = [];
-        for(const event in Discord.Constants.WSEvents)
-            events.push(event);
-        return events;
-    })(),
-});
+const client = new Discord.Client();
 
 client.on('disconnect', Shutdown);
-client.on('reconnecting', () => console.warn('Reconnect'));
 client.on('error', () => console.error('Connection error!'));
-client.on('resume', () => console.warn('Connection restored'));
 client.on('rateLimit', () => console.warn('Rate limit!'));
 
 const
     warnPeriod = 86400000,
-    Endpoints = Discord.Constants.Endpoints,
-    FLAGS = Discord.Permissions.FLAGS,
-    HOST = Discord.Constants.DefaultOptions.http.host,
+    Routes = Discord.Routes,
+    FLAGS = { ADMINISTRATOR: 8, MANAGE_MESSAGES: 8192 },
     ConnectedServers = new Map(),
     SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null)));
 
 const
-    AddReaction = (channel, message, emoji) => client.rest.makeRequest('put', Endpoints.Channel(channel).Message(message).Reaction(emoji).User('@me'), true),
-    AddRole = (server, user, role) => client.rest.makeRequest('put', Endpoints.Guild(server).Member(user).Role(role), true),
-    GetMessage = (channel, message) => client.rest.makeRequest('get', Endpoints.Channel(channel).Message(message), true),
-    GetUser = userId => client.rest.makeRequest('get', Endpoints.User(userId), true),
-    GetUserChannel = user => client.rest.makeRequest('post', Endpoints.User(client.user).channels, true, { recipient_id: user.id || user }),
-    RemoveRole = (server, member, role) => client.rest.makeRequest('delete', Endpoints.Guild(server).Member(member).Role(role), true),
-    SendMessage = (channel, content, embed) => client.rest.makeRequest('post', Endpoints.Channel(channel).messages, true, { content, embed });
+    AddReaction = (channel, message, emoji) => client.Request('put', Routes.Reaction(channel, message, emoji) + '/@me'),
+    AddRole = (server, user, role) => client.Request('put', Routes.Role(server, user, role)),
+    GetMessage = (channel, message) => client.Request('get', Routes.Message(channel, message)),
+    GetUser = userId => client.Request('get', Routes.User(userId)),
+    GetUserChannel = user => client.Request('post', Routes.User('@me') + '/channels', { recipient_id: user.id || user }),
+    RemoveRole = (server, user, role) => client.Request('delete', Routes.Role(server, user, role)),
+    SendMessage = (channel, content, embed) => client.Request('post', Routes.Channel(channel)+ '/messages', { content, embed });
 
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
@@ -247,7 +237,7 @@ const WarnTick = async () => {
     }
 };
 
-client.setInterval(WarnTick, 60000);
+setInterval(WarnTick, 60000);
 
 const MarkMessages = (() => {
     const
@@ -352,7 +342,7 @@ const CheckNews = async () => {
         await appDb.update(appOptions.lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
 };
 
-client.setInterval(CheckNews, 600000);
+setInterval(CheckNews, 600000);
 
 const CheckTwilight = async (server, member, xgmid) => {
     const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
@@ -383,7 +373,7 @@ const SyncTwilight = async () => {
     }
 };
 
-client.setInterval(SyncTwilight, 3600000);
+setInterval(SyncTwilight, 3600000);
 
 const SaveMessage = async message => {
     if(!mdbConnectionOptions)
@@ -431,7 +421,7 @@ const AddServer = server => {
 const events = {
     READY: async data => {
         client.user = data.user;
-        client.ws.send({ op: 3, d: { status: { web: 'online' }, game: { name: '/help', type: 3 }, afk: false, since: 0 } });
+        client.WsSend({ op: 3, d: { status: { web: 'online' }, game: { name: '/help', type: 3 }, afk: false, since: 0 } });
         
         ConnectedServers.clear();
         
@@ -508,7 +498,7 @@ const events = {
                 },
                 {
                     name: 'Переход',
-                    value: `${HOST}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
+                    value: `${Discord.ApiHost}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
                 },
             ],
             timestamp: new Date(result.dt),
@@ -607,10 +597,9 @@ const events = {
     },
 };
 
-client.on('raw', async packet => {
+client.on('packet', async packet => {
     const event = events[packet.t];
-    if(event)
-        event(packet.d);
+    event && event(packet.d);
 });
 
-client.manager.connectToWebSocket(process.env.TOKEN, () => {}, () => {});
+client.Connect(process.env.TOKEN);
