@@ -44,13 +44,13 @@ const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE &
 const client = new Discord.Client();
 
 client.on('disconnect', Shutdown);
-client.on('error', () => console.error('Connection error!'));
+client.on('error', console.error);
 client.on('rateLimit', () => console.warn('Rate limit!'));
 
 const
     warnPeriod = 86400000,
     Routes = Discord.Routes,
-    FLAGS = { ADMINISTRATOR: 8, MANAGE_MESSAGES: 8192 },
+    Permissions = Discord.Permissions,
     ConnectedServers = new Map(),
     SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null)));
 
@@ -65,7 +65,7 @@ const
 
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
-    CheckPermission = (permissions, flag) => ((permissions & FLAGS.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
+    CheckPermission = (permissions, flag) => ((permissions & Permissions.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
     ServerMember = (server, user) => server.members.find(member => member && (member.user.id == user.id)),
     ServerMemberIndex = (server, user) => server.members.findIndex(member => member && (member.user.id == user.id)),
     UserMention = user => `<@${user.id || user}>`;
@@ -153,7 +153,7 @@ const botCommands = {
         if(!(message.mentions && message.mentions.length))
             return;
         
-        if(!HasPermission(message.server, message.member, FLAGS.MANAGE_MESSAGES))
+        if(!HasPermission(message.server, message.member, Permissions.MANAGE_MESSAGES))
             return;
         
         const userId = message.mentions[0];
@@ -167,7 +167,7 @@ const botCommands = {
         }
         
         const member = ServerMember(message.server, user);
-        if(member && HasPermission(message.server, member, FLAGS.MANAGE_MESSAGES))
+        if(member && HasPermission(message.server, member, Permissions.MANAGE_MESSAGES))
             return;
         
         const
@@ -184,7 +184,7 @@ const botCommands = {
     },
     
     list: async message => {
-        if(!HasPermission(message.server, message.member, FLAGS.MANAGE_MESSAGES))
+        if(!HasPermission(message.server, message.member, Permissions.MANAGE_MESSAGES))
             return;
         
         const
