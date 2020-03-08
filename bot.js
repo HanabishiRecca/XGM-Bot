@@ -44,6 +44,7 @@ const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE &
 const client = new Discord.Client();
 
 client.on('disconnect', Shutdown);
+client.on('reconnecting', () => console.warn('Reconnect'));
 client.on('error', console.error);
 client.on('rateLimit', () => console.warn('Rate limit!'));
 
