@@ -23,7 +23,7 @@ if(global.gc)
 const
     Database = require('nedb-promise'),
     MariaDB = require('mariadb'),
-    Discord = require('./discordlite'),
+    Discord = require('discordlite'),
     XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
     config = require('./config.json');
