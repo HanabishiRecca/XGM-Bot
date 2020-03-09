@@ -499,7 +499,7 @@ const events = {
                 },
                 {
                     name: 'Переход',
-                    value: `${Discord.ApiHost}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
+                    value: `${Discord.WebHost}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
                 },
             ],
             timestamp: new Date(result.dt),
