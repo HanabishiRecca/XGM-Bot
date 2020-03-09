@@ -43,10 +43,10 @@ const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE &
 
 const client = new Discord.Client();
 
-client.on('disconnect', Shutdown);
-client.on('reconnecting', () => console.warn('Reconnect'));
+client.on('connect', () => console.log('Connection established.'));
+client.on('disconnect', code => console.error(`Disconnect. (${code})`));
 client.on('error', console.error);
-client.on('rateLimit', () => console.warn('Rate limit!'));
+client.on('warn', console.warn);
 
 const
     warnPeriod = 86400000,
