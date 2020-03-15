@@ -181,7 +181,7 @@ const botCommands = {
         await warnsDb.update({ _id: user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
         
         SendMessage(config.channel.log, `Пользователь ${UserMention(user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
-        SendMessage(await GetUserChannel(user), `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
+        SafePromise(SendMessage(await GetUserChannel(user), `Вы получили предупреждение ${warns}/${config.maxWarns}!`));
     },
     
     list: async message => {
