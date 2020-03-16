@@ -603,4 +603,5 @@ client.on('packet', async packet => {
     event && event(packet.d);
 });
 
-client.Connect(process.env.TOKEN);
+client.Auth(process.env.TOKEN);
+client.Connect();
