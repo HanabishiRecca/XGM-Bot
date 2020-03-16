@@ -62,7 +62,7 @@ const
     GetUser = userId => client.Request('get', Routes.User(userId)),
     GetUserChannel = user => client.Request('post', Routes.User('@me') + '/channels', { recipient_id: user.id || user }),
     RemoveRole = (server, user, role) => client.Request('delete', Routes.Role(server, user, role)),
-    SendMessage = (channel, content, embed) => client.Request('post', Routes.Channel(channel)+ '/messages', { content, embed });
+    SendMessage = (channel, content, embed) => client.Request('post', Routes.Channel(channel) + '/messages', { content, embed });
 
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
@@ -436,13 +436,16 @@ const events = {
     },
     
     MESSAGE_CREATE: async message => {
+        if(message.guild_id && (message.guild_id != config.server))
+            return;
+        
         if(!message.content)
             return;
         
         if(message.author.id == client.user.id)
             return;
         
-        SaveMessage(message);
+        message.guild_id && SaveMessage(message);
         
         if(!message.content.startsWith(config.prefix))
             return;
@@ -458,7 +461,7 @@ const events = {
         message.mentions = Misc.GetMentions(message.content);
         message.reply = content => SendMessage(message.channel_id, message.guild_id ? `${UserMention(message.author)}\n${content}` : content);
         
-        message.server = ConnectedServers.get(message.guild_id) || ConnectedServers.get(config.server);
+        message.server = message.guild_id ? ConnectedServers.get(message.guild_id) : ConnectedServers.get(config.server);
         
         if(!message.member)
             message.member = ServerMember(message.server, message.author);
@@ -468,6 +471,9 @@ const events = {
     },
     
     MESSAGE_UPDATE: async message => {
+        if(message.guild_id != config.server)
+            return;
+        
         if(!message.author)
             return;
         
@@ -507,6 +513,9 @@ const events = {
     },
     
     MESSAGE_DELETE: async message => {
+        if(message.guild_id != config.server)
+            return;
+        
         const result = await LoadMessage(message);
         if(!result)
             return;
@@ -533,6 +542,9 @@ const events = {
     },
     
     GUILD_MEMBER_ADD: async member => {
+        if(member.guild_id != config.server)
+            return;
+        
         SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user)} присоединился к серверу.`);
         
         const warnState = await warnsDb.findOne({ _id: member.user.id });
@@ -549,6 +561,9 @@ const events = {
     },
     
     GUILD_MEMBER_REMOVE: async member => {
+        if(member.guild_id != config.server)
+            return;
+        
         SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user)} покинул сервер.`);
         
         const
@@ -560,6 +575,9 @@ const events = {
     },
     
     GUILD_MEMBER_UPDATE: async member => {
+        if(member.guild_id != config.server)
+            return;
+        
         const
             server = ConnectedServers.get(member.guild_id),
             index = ServerMemberIndex(server, member.user.id);
@@ -568,11 +586,17 @@ const events = {
     },
     
     MESSAGE_REACTION_ADD: async reaction => {
+        if(reaction.guild_id != config.server)
+            return;
+        
         if(client.user.id != reaction.user_id)
             ReactionProc(reaction, true);
     },
     
     MESSAGE_REACTION_REMOVE: async reaction => {
+        if(reaction.guild_id != config.server)
+            return;
+        
         if(client.user.id != reaction.user_id)
             ReactionProc(reaction, false);
     },
