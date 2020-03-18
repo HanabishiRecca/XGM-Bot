@@ -96,7 +96,6 @@ const botCommands = {
         SendMessage(message.channel_id, `**Справка**
 
 **Команды для всех**
-\`verify [username]\` - привязать текущий аккаунт Discord к аккаунту на сайте XGM. Опционально можно указать имя пользователя на сайте, если оно не совпадает с текущим никнеймом.
 \`whois @user\` - получить информацию о привязке указанного пользователя.
 \`status\` - узнать свой статус предупреждений.
 \`help\` - показать данное сообщение.
@@ -106,42 +105,6 @@ const botCommands = {
 \`list\` - показать список нарушителей.
 
 *Команды можно отправлять боту в ЛС.*`);
-    },
-    
-    verify: async message => {
-        if(await usersDb.findOne({ _id: message.author.id })) {
-            message.reply('Аккаунт уже подтвержден.');
-            AddRole(message.server, message.author, config.role.user);
-            return;
-        }
-        
-        const
-            username = message.content.trim() || ServerMember(message.server, message.author).nick || message.author.username,
-            response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?username=${encodeURIComponent(username)}`));
-        
-        if(!(response && response.info)) {
-            message.reply(`Пользователь с именем \`${username}\` не зарегистрирован на сайте.`);
-            return;
-        }
-        
-        const xgmid = response.info.user.id;
-        if(await usersDb.findOne({ xgmid })) {
-            message.reply(`Пользователь \`${response.info.user.username}\` уже привязан к другому аккаунту Discord! :warning:`);
-            return;
-        }
-        
-        if(Misc.DecodeHtmlEntity(response.info.user.fields.discord) !== `${message.author.username}#${message.author.discriminator}`) {
-            message.reply(`Пользователь \`${response.info.user.username}\` не подтвержден. :no_entry_sign:\nНеобходимо правильно указать в сайтовом профиле свой тег Discord: **${message.author.username}**\`#${message.author.discriminator}\`\n<https://xgm.guru/profile>`);
-            return;
-        }
-        
-        await usersDb.insert({ _id: message.author.id, xgmid });
-        message.reply(`Пользователь \`${response.info.user.username}\` подтвержден! :white_check_mark:`);
-        SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(message.author)} → ID ${xgmid}`);
-        
-        AddRole(message.server, message.author, config.role.user);
-        if(response.info.user.seeTwilight)
-            AddRole(message.server, message.author, config.role.twilight);
     },
     
     whois: async message => {
@@ -641,3 +604,88 @@ client.on('packet', async packet => {
 
 client.Auth(process.env.TOKEN);
 client.Connect();
+
+if(!(process.env.AUTH_SVC && process.env.CLIENT_ID && process.env.CLIENT_SECRET && process.env.REDIRECT_URL))
+    return;
+
+const
+    AUTH_SVC = process.env.AUTH_SVC,
+    CLIENT_ID = encodeURIComponent(process.env.CLIENT_ID),
+    CLIENT_SECRET = encodeURIComponent(process.env.CLIENT_SECRET),
+    REDIRECT_URL = encodeURIComponent(process.env.REDIRECT_URL);
+
+const VerifyUser = async (code, xgmid) => {
+    const res = await SafePromise(client.Request('post', '/oauth2/token', `client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${REDIRECT_URL}&scope=identify`));
+    if(!(res && res.access_token))
+        return false;
+    
+    const user = await SafePromise(client.Request('get', Routes.User('@me'), null, `Bearer ${res.access_token}`));
+    if(!(user && user.id))
+        return false;
+    
+    const member = ServerMember(ConnectedServers.get(config.server), user);
+    
+    let retCode;
+    if(await usersDb.findOne({ _id: user.id })) {
+        SendPM(user, 'Аккаунт уже подтвержден.');
+        retCode = 208;
+    } else {
+        const clone = await usersDb.findOne({ xgmid });
+        if(clone) {
+            await usersDb.update({ xgmid }, { $set: { _id: user.id } }, { upsert: true });
+            SendMessage(config.channel.log, `Перепривязка аккаунта ${UserMention(user)} → ID ${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}`);
+        } else {
+            await usersDb.update({ _id: user.id }, { $set: { xgmid } }, { upsert: true });
+            SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(user)} → ID ${xgmid}`);
+        }
+        SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
+        retCode = 200;
+    }
+    
+    if(member) {
+        AddRole(config.server, user, config.role.user);
+        CheckTwilight(config.server, member, xgmid);
+    }
+    
+    return { code: retCode, id: user.id };
+};
+
+require('http').createServer(async (request, response) => {
+    if(request.method != 'POST') {
+        response.statusCode = 405;
+        response.end();
+        return;
+    }
+    
+    if(request.headers.authorization != AUTH_SVC) {
+        response.statusCode = 401;
+        response.end();
+        return;
+    }
+    
+    const
+        code = request.headers.code,
+        xgmid = Number(request.headers.userid);
+    
+    if(!(code && (xgmid > 0))) {
+        response.statusCode = 400;
+        response.end();
+        return;
+    }
+    
+    let ret;
+    try {
+        ret = await VerifyUser(code, xgmid);
+        if(ret) {
+            response.statusCode = ret.code;
+            response.setHeader('Content-Length', Buffer.byteLength(ret.id));
+            response.write(ret.id);
+        } else {
+            response.statusCode = 400;
+        }
+    } catch {
+        response.statusCode = 500;
+    }
+    
+    response.end();
+}).listen(80);
