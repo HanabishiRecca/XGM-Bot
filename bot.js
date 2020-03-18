@@ -617,11 +617,11 @@ const
 const VerifyUser = async (code, xgmid) => {
     const res = await SafePromise(client.Request('post', '/oauth2/token', `client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${REDIRECT_URL}&scope=identify`));
     if(!(res && res.access_token))
-        return false;
+        return 400;
     
     const user = await SafePromise(client.Request('get', Routes.User('@me'), null, `Bearer ${res.access_token}`));
     if(!(user && user.id))
-        return false;
+        return 500;
     
     const member = ServerMember(ConnectedServers.get(config.server), user);
     
@@ -647,7 +647,7 @@ const VerifyUser = async (code, xgmid) => {
         CheckTwilight(config.server, member, xgmid);
     }
     
-    return { code: retCode, id: user.id };
+    return { code: retCode, content: user.id };
 };
 
 require('http').createServer(async (request, response) => {
@@ -676,15 +676,20 @@ require('http').createServer(async (request, response) => {
     let ret;
     try {
         ret = await VerifyUser(code, xgmid);
-        if(ret) {
-            response.statusCode = ret.code;
-            response.setHeader('Content-Length', Buffer.byteLength(ret.id));
-            response.write(ret.id);
-        } else {
-            response.statusCode = 400;
-        }
     } catch {
         response.statusCode = 500;
+        response.end();
+        return;
+    }
+    
+    if(ret.code) {
+        response.statusCode = ret.code;
+        if(ret.content) {
+            response.setHeader('Content-Length', Buffer.byteLength(ret.content));
+            response.write(ret.content);
+        }
+    } else {
+        response.statusCode = ret;
     }
     
     response.end();
