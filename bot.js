@@ -89,6 +89,8 @@ const FormatWarn = (warnState, time) => {
     return (warnState.warns < config.maxWarns) ? result : `${result}, в **Read only** на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - config.maxWarns + 1) * warnPeriod) - time)}`;
 };
 
+const SendPM = async (user, msg) => await SafePromise(SendMessage(await GetUserChannel(user), msg));
+
 const botCommands = {
     help: async message => {
         SendMessage(message.channel_id, `**Справка**
@@ -181,7 +183,7 @@ const botCommands = {
         await warnsDb.update({ _id: user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
         
         SendMessage(config.channel.log, `Пользователь ${UserMention(user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
-        SafePromise(SendMessage(await GetUserChannel(user), `Вы получили предупреждение ${warns}/${config.maxWarns}!`));
+        SendPM(user, `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
     },
     
     list: async message => {
