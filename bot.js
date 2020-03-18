@@ -415,7 +415,6 @@ const AddServer = server => {
     ConnectedServers.set(server.id, {
         id: server.id,
         roles: server.roles,
-        members: server.members,
     });
 };
 
@@ -603,13 +602,24 @@ const events = {
     
     GUILD_CREATE: async server => {
         AddServer(server);
+        client.WsSend({ op: 8, d: { guild_id: server.id, query: '', limit: 0 } });
         
         if(server.id != config.server)
             return;
         
         SetMarks(server.emojis);
-        SyncTwilight();
         CheckNews();
+    },
+    
+    GUILD_MEMBERS_CHUNK: async chunk => {
+        const server = ConnectedServers.get(chunk.guild_id);
+        if(!server)
+            return;
+        
+        server.members = server.members ? server.members.concat(chunk.members) : chunk.members;
+        
+        if((server.id == config.server) && (chunk.members.length < 1000))
+            SyncTwilight();
     },
     
     GUILD_UPDATE: async server => {
