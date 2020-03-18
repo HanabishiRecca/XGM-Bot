@@ -553,7 +553,7 @@ const events = {
         const userInfo = await usersDb.findOne({ _id: member.user.id });
         if(userInfo) {
             AddRole(member.guild_id, member.user, config.role.user);
-            CheckTwilight(member.guild_id, member.user, userInfo.xgmid);
+            CheckTwilight(member.guild_id, member, userInfo.xgmid);
         }
         
         ConnectedServers.get(member.guild_id).members.unshift(member);
