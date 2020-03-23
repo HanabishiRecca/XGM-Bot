@@ -67,20 +67,19 @@ const
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
     CheckPermission = (permissions, flag) => ((permissions & Permissions.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
-    ServerMember = (server, user) => server.members.find(member => member && (member.user.id == user.id)),
-    ServerMemberIndex = (server, user) => server.members.findIndex(member => member && (member.user.id == user.id)),
     UserMention = user => `<@${user.id || user}>`;
 
 const HasPermission = (server, member, flag) => {
-    const roles = member.roles;
+    const
+        serverRoles = server.roles,
+        roles = member.roles;
+    
     for(let i = 0; i < roles.length; i++) {
-        const
-            rid = roles[i],
-            role = server.roles.find(elem => elem.id == rid);
-        
+        const role = serverRoles.get(roles[i]);
         if(role && CheckPermission(role.permissions, flag))
             return true;
     }
+    
     return false;
 };
 
@@ -127,12 +126,10 @@ const botCommands = {
             return;
         
         const user = await SafePromise(GetUser(userId));
-        if(!user) {
-            message.reply('Указанный пользователь не существует.');
-            return;
-        }
+        if(!user)
+            return message.reply('Указанный пользователь не существует.');
         
-        const member = ServerMember(message.server, user);
+        const member = message.server.members.get(user.id);
         if(member && HasPermission(message.server, member, Permissions.MANAGE_MESSAGES))
             return;
         
@@ -332,7 +329,7 @@ const SyncTwilight = async () => {
     for(let i = 0; i < users.length; i++) {
         const
             userInfo = users[i],
-            member = ServerMember(server, { id: userInfo._id });
+            member = server.members.get(userInfo._id);
         
         if(member)
             await CheckTwilight(server, member, userInfo.xgmid);
@@ -376,11 +373,25 @@ const LoadMessage = async message => {
         return results[0];
 };
 
+const GenRolesMap = roles => {
+    const map = new Map();
+    for(let i = 0; i < roles.length; i++) {
+        const role = roles[i];
+        map.set(role.id, role);
+    }
+    return map;
+};
+
 const AddServer = server => {
     ConnectedServers.set(server.id, {
         id: server.id,
-        roles: server.roles,
+        roles: GenRolesMap(server.roles),
+        members: new Map(),
     });
+};
+
+const UpdateServer = (server, update) => {
+    server.roles = GenRolesMap(update.roles);
 };
 
 const events = {
@@ -428,7 +439,7 @@ const events = {
         message.server = message.guild_id ? ConnectedServers.get(message.guild_id) : ConnectedServers.get(config.server);
         
         if(!message.member)
-            message.member = ServerMember(message.server, message.author);
+            message.member = message.server.members.get(message.author.id);
         
         console.log(`COMMAND (${command}) ARG (${message.content}) USER (${message.author.username}#${message.author.discriminator}) ${message.guild_id ? 'SERVER' : 'PM'}`);
         botCommands[command](message);
@@ -506,6 +517,9 @@ const events = {
     },
     
     GUILD_MEMBER_ADD: async member => {
+        const server = ConnectedServers.get(member.guild_id);
+        server && server.members.set(member.user.id, member);
+        
         if(member.guild_id != config.server)
             return;
         
@@ -520,33 +534,19 @@ const events = {
             AddRole(member.guild_id, member.user, config.role.user);
             CheckTwilight(member.guild_id, member, userInfo.xgmid);
         }
-        
-        ConnectedServers.get(member.guild_id).members.unshift(member);
-    },
-    
-    GUILD_MEMBER_REMOVE: async member => {
-        if(member.guild_id != config.server)
-            return;
-        
-        SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user)} покинул сервер.`);
-        
-        const
-            members = ConnectedServers.get(member.guild_id).members,
-            index = members.findIndex(elem => elem && (elem.user.id == member.user.id));
-        
-        if(index > -1)
-            members[index] = null;
     },
     
     GUILD_MEMBER_UPDATE: async member => {
-        if(member.guild_id != config.server)
-            return;
+        const server = ConnectedServers.get(member.guild_id);
+        server && server.members.set(member.user.id, member);
+    },
+    
+    GUILD_MEMBER_REMOVE: async member => {
+        const server = ConnectedServers.get(member.guild_id);
+        server && server.members.delete(member.user.id);
         
-        const
-            server = ConnectedServers.get(member.guild_id),
-            index = ServerMemberIndex(server, member.user.id);
-        
-        server.members[index] = member;
+        if(member.guild_id == config.server)
+            SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user)} покинул сервер.`);
     },
     
     MESSAGE_REACTION_ADD: async reaction => {
@@ -576,24 +576,46 @@ const events = {
         CheckNews();
     },
     
+    GUILD_UPDATE: async update => {
+        const server = ConnectedServers.get(update.id);
+        server && UpdateServer(server, update);
+    },
+    
+    GUILD_DELETE: async deleted => {
+        !deleted.unavailable && ConnectedServers.delete(deleted.id);
+    },
+    
     GUILD_MEMBERS_CHUNK: async chunk => {
         const server = ConnectedServers.get(chunk.guild_id);
         if(!server)
             return;
         
-        server.members = server.members ? server.members.concat(chunk.members) : chunk.members;
+        const
+            map = server.members,
+            members = chunk.members;
+        
+        for(let i = 0; i < members.length; i++) {
+            const member = members[i];
+            map.set(member.user.id, member);
+        }
         
         if((server.id == config.server) && (chunk.members.length < 1000))
             SyncTwilight();
     },
     
-    GUILD_UPDATE: async server => {
-        const sobj = ConnectedServers.get(server.id);
-        sobj.roles = server.roles;
+    GUILD_ROLE_CREATE: async data => {
+        const server = ConnectedServers.get(data.guild_id);
+        server && server.roles.set(data.role.id, data.role);
     },
     
-    GUILD_DELETE: async server => {
-        ConnectedServers.delete(server.id);
+    GUILD_ROLE_UPDATE: async data => {
+        const server = ConnectedServers.get(data.guild_id);
+        server && server.roles.set(data.role.id, data.role);
+    },
+    
+    GUILD_ROLE_DELETE: async data => {
+        const server = ConnectedServers.get(data.guild_id);
+        server && server.roles.delete(data.role_id);
     },
 };
 
@@ -623,8 +645,6 @@ const VerifyUser = async (code, xgmid) => {
     if(!(user && user.id))
         return 500;
     
-    const member = ServerMember(ConnectedServers.get(config.server), user);
-    
     let retCode;
     if(await usersDb.findOne({ _id: user.id })) {
         SendPM(user, 'Аккаунт уже подтвержден.');
@@ -642,6 +662,7 @@ const VerifyUser = async (code, xgmid) => {
         retCode = 200;
     }
     
+    const member = ConnectedServers.get(config.server).members.get(user.id);
     if(member) {
         AddRole(config.server, user, config.role.user);
         CheckTwilight(config.server, member, xgmid);
