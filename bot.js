@@ -651,13 +651,12 @@ const VerifyUser = async (code, xgmid) => {
         retCode = 208;
     } else {
         const clone = await usersDb.findOne({ xgmid });
-        if(clone) {
-            await usersDb.update({ xgmid }, { $set: { _id: user.id } }, { upsert: true });
-            SendMessage(config.channel.log, `Перепривязка аккаунта ${UserMention(user)} → ID ${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}`);
-        } else {
-            await usersDb.update({ _id: user.id }, { $set: { xgmid } }, { upsert: true });
-            SendMessage(config.channel.log, `Привязка аккаунта ${UserMention(user)} → ID ${xgmid}`);
-        }
+        clone && await usersDb.remove({ xgmid });
+        await usersDb.insert({ _id: user.id, xgmid });
+        SendMessage(config.channel.log, clone ?
+            `Перепривязка аккаунта ${UserMention(user)} → ID ${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
+            `Привязка аккаунта ${UserMention(user)} → ID ${xgmid}`
+        );
         SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
         retCode = 200;
     }
@@ -697,7 +696,8 @@ require('http').createServer(async (request, response) => {
     let ret;
     try {
         ret = await VerifyUser(code, xgmid);
-    } catch {
+    } catch (e) {
+        console.error(e);
         response.statusCode = 500;
         response.end();
         return;
