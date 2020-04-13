@@ -714,10 +714,21 @@ const webApiFuncs = {
         const data = await SafePromise(Misc.ReadIncomingData(request));
         if(!data)
             return response.statusCode = 400;
-        
+
         const text = data.toString();
         SendPM(userInfo._id, (text.length > 2000) ? text.substring(0, 1999) : text);
-        
+
+        response.statusCode = 200;
+    },
+
+    '/sys': async (request, response) => {
+        const data = await SafePromise(Misc.ReadIncomingData(request));
+        if(!data)
+            return response.statusCode = 400;
+
+        const text = data.toString();
+        SendMessage(config.channel.system, (text.length > 2000) ? text.substring(0, 1999) : text);
+
         response.statusCode = 200;
     },
 };
