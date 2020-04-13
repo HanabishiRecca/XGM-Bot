@@ -659,16 +659,16 @@ const VerifyUser = async (code, xgmid) => {
             console.log(`Verify: remove ${user.id}`);
             await usersDb.remove({ xgmid });
         }
-        
+
         console.log(`Verify: ${user.id} -> ${xgmid}`);
         await usersDb.insert({ _id: user.id, xgmid });
-        
+
         SendMessage(config.channel.log, clone ?
             `Перепривязка аккаунта ${UserMention(user)} → https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
             `Привязка аккаунта ${UserMention(user)} → https://xgm.guru/user/${xgmid}`
         );
         SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
-        
+
         retCode = 200;
     }
 
@@ -700,6 +700,25 @@ const webApiFuncs = {
         } else {
             response.statusCode = ret;
         }
+    },
+
+    '/pm': async (request, response) => {
+        const xgmid = Number(request.headers.userid);
+        if(!(xgmid > 0))
+            return response.statusCode = 400;
+
+        const userInfo = await usersDb.findOne({ xgmid });
+        if(!userInfo)
+            return response.statusCode = 406;
+
+        const data = await SafePromise(Misc.ReadIncomingData(request));
+        if(!data)
+            return response.statusCode = 400;
+        
+        const text = data.toString();
+        SendPM(userInfo._id, (text.length > 2000) ? text.substring(0, 1999) : text);
+        
+        response.statusCode = 200;
     },
 };
 
