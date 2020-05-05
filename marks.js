@@ -11,9 +11,6 @@ exports.list = [
     //battle.net
     { channel: marksChannel, message: platformsMessage, role: '544497908016480268', emoji: '543780416822181889' },
 
-    //garena
-    { channel: marksChannel, message: platformsMessage, role: '544571908923064320', emoji: '543780416725975053' },
-
     //iccup
     { channel: marksChannel, message: platformsMessage, role: '544571778627010560', emoji: '543780417245937667' },
 
