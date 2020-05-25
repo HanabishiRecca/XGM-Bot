@@ -664,8 +664,8 @@ const VerifyUser = async (code, xgmid) => {
         await usersDb.insert({ _id: user.id, xgmid });
 
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта ${UserMention(user)} → https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
-            `Привязка аккаунта ${UserMention(user)} → https://xgm.guru/user/${xgmid}`
+            `Перепривязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}`:
+            `Привязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}`
         );
         SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
 
@@ -707,14 +707,14 @@ const webApiFuncs = {
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
-        console.log(`Verify: delete request! XGM: ${xgmid}`);
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
             return response.statusCode = 406;
 
-        console.log(`Verify: delete! ${user.id}`);
+        console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
         RemoveRole(config.server, userInfo._id, config.role.user);
+        SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: https://xgm.guru/user/${xgmid}` + request.headers.reason ? `\n**Причина:** ${request.headers.reason}` : '');
         SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален или забанен.');
 
         response.statusCode = 200;
