@@ -743,7 +743,7 @@ const HandleRequest = async (request, response) => {
     if(!(request.url && webApiFuncs.hasOwnProperty(request.url)))
         return response.statusCode = 404;
 
-    await webApiFuncs[request.url]();
+    await webApiFuncs[request.url](request, response);
 };
 
 require('http').createServer(async (request, response) => {
