@@ -664,7 +664,7 @@ const VerifyUser = async (code, xgmid) => {
         await usersDb.insert({ _id: user.id, xgmid });
 
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}`:
+            `Перепривязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
             `Привязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}`
         );
         SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
@@ -711,9 +711,11 @@ const webApiFuncs = {
         if(!userInfo)
             return response.statusCode = 406;
 
+        const data = await SafePromise(Misc.ReadIncomingData(request));
+
         console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
-        SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: https://xgm.guru/user/${xgmid}` + (request.headers.reason ? `\n**Причина:** ${request.headers.reason}` : ''));
+        SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: https://xgm.guru/user/${xgmid}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             RemoveRole(config.server, userInfo._id, config.role.user);
