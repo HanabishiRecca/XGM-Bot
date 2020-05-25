@@ -702,6 +702,28 @@ const webApiFuncs = {
         }
     },
 
+    '/delete': async (request, response) => {
+        const xgmid = Number(request.headers.userid);
+        if(!(xgmid > 0))
+            return response.statusCode = 400;
+
+        console.log(`Verify: delete request! XGM: ${xgmid}`);
+        const userInfo = await usersDb.findOne({ xgmid });
+        if(!userInfo)
+            return response.statusCode = 406;
+
+        console.log(`Verify: delete! ${user.id}`);
+        await usersDb.remove({ xgmid });
+        RemoveRole(config.server, userInfo._id, config.role.user);
+        SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален или забанен.');
+
+        response.statusCode = 200;
+    },
+
+    '/update-global-status': async (request, response) => {
+        response.statusCode = 200;
+    },
+
     '/pm': async (request, response) => {
         const xgmid = Number(request.headers.userid);
         if(!(xgmid > 0))
