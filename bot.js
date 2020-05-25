@@ -713,9 +713,11 @@ const webApiFuncs = {
 
         console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
-        RemoveRole(config.server, userInfo._id, config.role.user);
         SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: https://xgm.guru/user/${xgmid}` + request.headers.reason ? `\n**Причина:** ${request.headers.reason}` : '');
         SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален или забанен.');
+        
+        if(ConnectedServers.get(config.server).members.has(userInfo._id))
+            RemoveRole(config.server, userInfo._id, config.role.user);
 
         response.statusCode = 200;
     },
