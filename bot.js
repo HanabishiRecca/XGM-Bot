@@ -638,12 +638,16 @@ const
 
 const VerifyUser = async (code, xgmid) => {
     const res = await SafePromise(client.Request('post', '/oauth2/token', `client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${REDIRECT_URL}&scope=identify`));
-    if(!(res && res.access_token))
+    if(!(res && res.access_token)) {
+        console.warn('Verify: token request failed.');
         return 400;
+    }
 
     const user = await SafePromise(client.Request('get', Routes.User('@me'), null, `Bearer ${res.access_token}`));
-    if(!(user && user.id))
+    if(!(user && user.id)) {
+        console.warn('Verify: user request failed.');
         return 500;
+    }
 
     let retCode;
     if(await usersDb.findOne({ _id: user.id })) {
@@ -651,13 +655,20 @@ const VerifyUser = async (code, xgmid) => {
         retCode = 208;
     } else {
         const clone = await usersDb.findOne({ xgmid });
-        clone && await usersDb.remove({ xgmid });
+        if(clone) {
+            console.log(`Verify: remove ${user.id}`);
+            await usersDb.remove({ xgmid });
+        }
+
+        console.log(`Verify: ${user.id} -> ${xgmid}`);
         await usersDb.insert({ _id: user.id, xgmid });
+
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта ${UserMention(user)} → ID ${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
-            `Привязка аккаунта ${UserMention(user)} → ID ${xgmid}`
+            `Перепривязка аккаунта ${UserMention(user)} → https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
+            `Привязка аккаунта ${UserMention(user)} → https://xgm.guru/user/${xgmid}`
         );
         SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
+
         retCode = 200;
     }
 
@@ -670,48 +681,77 @@ const VerifyUser = async (code, xgmid) => {
     return { code: retCode, content: user.id };
 };
 
+const webApiFuncs = {
+    '/verify': async (request, response) => {
+        const
+            code = request.headers.code,
+            xgmid = Number(request.headers.userid);
+
+        if(!(code && (xgmid > 0)))
+            return response.statusCode = 400;
+
+        const ret = await VerifyUser(code, xgmid);
+        if(ret.code) {
+            response.statusCode = ret.code;
+            if(ret.content) {
+                response.setHeader('Content-Length', Buffer.byteLength(ret.content));
+                response.write(ret.content);
+            }
+        } else {
+            response.statusCode = ret;
+        }
+    },
+
+    '/pm': async (request, response) => {
+        const xgmid = Number(request.headers.userid);
+        if(!(xgmid > 0))
+            return response.statusCode = 400;
+
+        const userInfo = await usersDb.findOne({ xgmid });
+        if(!userInfo)
+            return response.statusCode = 406;
+
+        const data = await SafePromise(Misc.ReadIncomingData(request));
+        if(!data)
+            return response.statusCode = 400;
+
+        const text = data.toString();
+        SendPM(userInfo._id, (text.length > 2000) ? text.substring(0, 1999) : text);
+
+        response.statusCode = 200;
+    },
+
+    '/sys': async (request, response) => {
+        const data = await SafePromise(Misc.ReadIncomingData(request));
+        if(!data)
+            return response.statusCode = 400;
+
+        const text = data.toString();
+        SendMessage(config.channel.system, (text.length > 2000) ? text.substring(0, 1999) : text);
+
+        response.statusCode = 200;
+    },
+};
+
+const HandleRequest = async (request, response) => {
+    if(request.method != 'POST')
+        return response.statusCode = 405;
+
+    if(request.headers.authorization != AUTH_SVC)
+        return response.statusCode = 401;
+
+    if(!(request.url && webApiFuncs.hasOwnProperty(request.url)))
+        return response.statusCode = 404;
+
+    await webApiFuncs[request.url]();
+};
+
 require('http').createServer(async (request, response) => {
-    if(request.method != 'POST') {
-        response.statusCode = 405;
-        response.end();
-        return;
-    }
-
-    if(request.headers.authorization != AUTH_SVC) {
-        response.statusCode = 401;
-        response.end();
-        return;
-    }
-
-    const
-        code = request.headers.code,
-        xgmid = Number(request.headers.userid);
-
-    if(!(code && (xgmid > 0))) {
-        response.statusCode = 400;
-        response.end();
-        return;
-    }
-
-    let ret;
     try {
-        ret = await VerifyUser(code, xgmid);
+        await HandleRequest(request, response);
     } catch (e) {
         console.error(e);
         response.statusCode = 500;
-        response.end();
-        return;
     }
-
-    if(ret.code) {
-        response.statusCode = ret.code;
-        if(ret.content) {
-            response.setHeader('Content-Length', Buffer.byteLength(ret.content));
-            response.write(ret.content);
-        }
-    } else {
-        response.statusCode = ret;
-    }
-
     response.end();
 }).listen(80);

@@ -21,32 +21,47 @@ exports.FormatWarnTime = time => {
     return result;
 };
 
+const ReadIncomingData = incoming => new Promise((resolve, reject) => {
+    const chunks = [];
+    let dataLen = 0;
+
+    incoming.on('data', chunk => {
+        chunks.push(chunk);
+        dataLen += chunk.length;
+    });
+
+    incoming.on('end', () => {
+        if(!incoming.complete)
+            return reject('Response error.');
+
+        if(dataLen == 0)
+            return resolve();
+
+        if(chunks.length == 1)
+            return resolve(chunks[0]);
+
+        const data = Buffer.allocUnsafe(dataLen);
+        let len = 0;
+
+        for(let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            chunk.copy(data, len);
+            len += chunk.length;
+        }
+
+        resolve(data);
+    });
+});
+
+exports.ReadIncomingData = ReadIncomingData;
+
 const https = require('https');
-exports.HttpsGet = url => new Promise(resolve => {
+exports.HttpsGet = url => new Promise((resolve, reject) => {
     https.get(url, response => {
         if(response.statusCode != 200)
             return resolve(null);
 
-        const chunks = [];
-        let dataLen = 0;
-
-        response.on('data', data => {
-            chunks.push(data);
-            dataLen += data.length;
-        });
-
-        response.on('end', () => {
-            const data = Buffer.allocUnsafe(dataLen);
-            let len = 0;
-
-            for(let i = 0; i < chunks.length; i++) {
-                const chunk = chunks[i];
-                chunk.copy(data, len);
-                len += chunk.length;
-            }
-
-            return resolve(data);
-        });
+        ReadIncomingData(response).then(resolve).catch(reject);
     });
 });
 
