@@ -622,7 +622,7 @@ client.on('packet', async packet => {
 });
 
 client.Auth(process.env.TOKEN);
-client.Connect();
+client.Connect(false, Discord.Intents.GUILDS | Discord.Intents.GUILD_MEMBERS | Discord.Intents.GUILD_MESSAGES | Discord.Intents.GUILD_MESSAGE_REACTIONS | Discord.Intents.DIRECT_MESSAGES);
 
 if(!(process.env.AUTH_SVC && process.env.CLIENT_ID && process.env.CLIENT_SECRET && process.env.REDIRECT_URL))
     return;
