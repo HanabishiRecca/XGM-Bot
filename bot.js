@@ -10,15 +10,12 @@ const Shutdown = err => {
     process.exit(1);
 };
 
-if(!process.env.TOKEN)
-    Shutdown('Token required.');
+!process.env.TOKEN && Shutdown('Token required.');
 
 const storagePath = process.env.STORAGE;
-if(!storagePath)
-    Shutdown('Storage path required.');
+!storagePath && Shutdown('Storage path required.');
 
-if(global.gc)
-    setInterval(global.gc, 3600000);
+global.gc && setInterval(global.gc, 3600000);
 
 const
     Database = require('nedb-promise'),
@@ -224,8 +221,7 @@ const ReactionProc = async (reaction, add) => {
         return;
 
     const mark = msg.marks.find(elem => elem.emoji == reaction.emoji.id);
-    if(mark)
-        (add ? AddRole : RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
+    mark && (add ? AddRole : RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
 };
 
 const SetMarks = async serverEmojis => {
@@ -331,8 +327,7 @@ const SyncTwilight = async () => {
             userInfo = users[i],
             member = server.members.get(userInfo._id);
 
-        if(member)
-            await CheckTwilight(server, member, userInfo.xgmid);
+        member && await CheckTwilight(server, member, userInfo.xgmid);
     }
 };
 
