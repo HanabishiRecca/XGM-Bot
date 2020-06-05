@@ -348,7 +348,7 @@ const SaveMessage = async message => {
     const connection = await MariaDB.createConnection(mdbConnectionOptions);
     try {
         await connection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content });
-    } catch (err) {
+    } catch(err) {
         console.error(err);
     } finally {
         connection.end();
@@ -363,7 +363,7 @@ const LoadMessage = async message => {
     const connection = await MariaDB.createConnection(mdbConnectionOptions);
     try {
         results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
-    } catch (err) {
+    } catch(err) {
         console.error(err);
     } finally {
         connection.end();
@@ -464,7 +464,8 @@ const events = {
 
         SendMessage(config.channel.deleted, '', {
             title: 'Сообщение изменено',
-            fields: [{
+            fields: [
+                {
                     name: 'Автор',
                     value: UserMention(result.user),
                     inline: true,
@@ -497,7 +498,8 @@ const events = {
 
         SendMessage(config.channel.deleted, '', {
             title: 'Сообщение удалено',
-            fields: [{
+            fields: [
+                {
                     name: 'Автор',
                     value: UserMention(result.user),
                     inline: true,
@@ -776,7 +778,7 @@ const HandleRequest = async (request, response) => {
 require('http').createServer(async (request, response) => {
     try {
         await HandleRequest(request, response);
-    } catch (e) {
+    } catch(e) {
         console.error(e);
         response.statusCode = 500;
     }
