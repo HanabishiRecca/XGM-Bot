@@ -9,8 +9,8 @@
     "license": "MIT",
     "main": "bot.js",
     "dependencies": {
-        "discordlite": "HanabishiRecca/DiscordLite",
-        "fast-xml-parser": "^3.17.3",
+        "discord-slim": "^1.1.0",
+        "fast-xml-parser": "^3.17.4",
         "mariadb": "^2.4.0",
         "nedb-promise": "^2.0.1"
     }
