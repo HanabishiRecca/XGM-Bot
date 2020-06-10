@@ -65,3 +65,6 @@ typings/
 
 # database
 storage/
+
+# Ignore lockfile
+package-lock.json
