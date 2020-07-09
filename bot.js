@@ -42,8 +42,9 @@ const client = new Discord.Client();
 
 client.on('connect', () => console.log('Connection established.'));
 client.on('disconnect', code => console.error(`Disconnect. (${code})`));
-client.on('error', console.error);
 client.on('warn', console.warn);
+client.on('error', console.error);
+client.on('fatal', Shutdown);
 
 const
     warnPeriod = 86400000,
