@@ -77,17 +77,3 @@ exports.GetMentions = str => {
 
     return result;
 };
-
-const win1251chars = (() => {
-    let result = '';
-    for(let i = 0; i < 128; i++)
-        result += String.fromCharCode(i);
-    return result + 'ЂЃ‚ѓ„…†‡€‰Љ‹ЊЌЋЏђ‘’“”•–— ™љ›њќћџ ЎўЈ¤Ґ¦§Ё©Є«¬­®Ї°±Ііґµ¶·ё№є»јЅѕїАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя';
-})();
-
-exports.Win1251ToUtf8 = data => {
-    let result = '';
-    for(let i = 0; i < data.length; i++)
-        result += win1251chars[data[i]];
-    return result;
-};

@@ -262,7 +262,7 @@ const CheckNews = async () => {
     if(!(data && data.length))
         return;
 
-    const feed = XmlParser.parse(Misc.Win1251ToUtf8(data), { ignoreAttributes: false, attributeNamePrefix: '' });
+    const feed = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' });
     if(!(feed.rss && feed.rss.channel && feed.rss.channel.item))
         return;
 
