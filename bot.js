@@ -656,6 +656,11 @@ const VerifyUser = async (code, xgmid) => {
         if(clone) {
             console.log(`Verify: remove ${user.id}`);
             await usersDb.remove({ xgmid });
+            const member = ConnectedServers.get(config.server).members.get(clone._id);
+            if(member) {
+                RemoveRole(config.server, member.user, config.role.user);
+                RemoveRole(config.server, member.user, config.role.twilight);
+            }
         }
 
         console.log(`Verify: ${user.id} -> ${xgmid}`);
