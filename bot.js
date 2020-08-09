@@ -175,6 +175,8 @@ const botCommands = {
     },
 };
 
+botCommands.who = botCommands.whois;
+
 const WarnTick = async () => {
     const warnStates = await warnsDb.find({});
     if(warnStates.length < 1)
