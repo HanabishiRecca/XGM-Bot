@@ -90,10 +90,11 @@ const SendPM = async (user, msg) => await SafePromise(SendMessage(await GetUserC
 
 const botCommands = {
     help: async message => {
-        SendMessage(message.channel_id, `**Справка**
+        SendMessage(message.channel_id,
+`**Справка**
 
 **Команды для всех**
-\`whois @user\` - получить информацию о привязке указанного пользователя.
+\`who @user\` - получить информацию о привязке указанного пользователя.
 \`status\` - узнать свой статус предупреждений.
 \`help\` - показать данное сообщение.
 
@@ -101,7 +102,8 @@ const botCommands = {
 \`warn @user\` - выдать предупреждение указанному пользователю.
 \`list\` - показать список нарушителей.
 
-*Команды можно отправлять боту в ЛС.*`);
+*Команды можно отправлять боту в ЛС.*
+*Для упоминания любого пользователя в дискорде можно использовать его ID в виде \`<@ID>\`.*`);
     },
 
     who: async message => {
