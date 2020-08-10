@@ -104,7 +104,7 @@ const botCommands = {
 *Команды можно отправлять боту в ЛС.*`);
     },
 
-    whois: async message => {
+    who: async message => {
         if(!(message.mentions && message.mentions.length))
             return;
 
@@ -175,7 +175,7 @@ const botCommands = {
     },
 };
 
-botCommands.who = botCommands.whois;
+botCommands.whois = botCommands.who;
 
 const WarnTick = async () => {
     const warnStates = await warnsDb.find({});
