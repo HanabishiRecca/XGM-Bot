@@ -652,9 +652,17 @@ const VerifyUser = async (code, xgmid) => {
     }
 
     let retCode;
-    if(await usersDb.findOne({ _id: user.id })) {
-        SendPM(user, 'Аккаунт уже подтвержден.');
-        retCode = 208;
+    const userInfo = await usersDb.findOne({ _id: user.id });
+    if(userInfo) {
+        if(userInfo.xgmid == xgmid) {
+            SendPM(user, 'Аккаунт уже подтвержден.');
+            retCode = 208;
+        } else {
+            await usersDb.update({ _id: user.id }, { xgmid });
+            SendMessage(config.channel.log, `Перепривязка аккаунта XGM ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
+            SendPM(user, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
+            retCode = 200;
+        }
     } else {
         const clone = await usersDb.findOne({ xgmid });
         if(clone) {
@@ -671,7 +679,7 @@ const VerifyUser = async (code, xgmid) => {
         await usersDb.insert({ _id: user.id, xgmid });
 
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
+            `Перепривязка аккаунта Discord ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
             `Привязка аккаунта ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}`
         );
         SendPM(user, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
