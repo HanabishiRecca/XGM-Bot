@@ -91,8 +91,7 @@ const SendPM = async (user, msg) => await SafePromise(SendMessage(await GetUserC
 
 const botCommands = {
     help: async message => {
-        SendMessage(message.channel_id,
-`**Справка**
+        SendMessage(message.channel_id, `**Справка**
 
 **Команды для всех**
 \`who @user\` - получить информацию о привязке указанного пользователя.
