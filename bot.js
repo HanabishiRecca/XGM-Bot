@@ -65,7 +65,8 @@ const
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
     CheckPermission = (permissions, flag) => ((permissions & Permissions.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
-    UserMention = user => `<@${user.id || user}>`;
+    UserMention = user => `<@${user.id || user}>`,
+    XgmUserLink = xgmid => `https://xgm.guru/user/${xgmid}`;
 
 const HasPermission = (server, member, flag) => {
     const
@@ -671,10 +672,10 @@ const VerifyUser = async (code, xgmid) => {
         await usersDb.insert({ _id: user.id, xgmid });
 
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}\nСтарый аккаунт был ${UserMention(clone._id)}` :
-            `Привязка аккаунта ${UserMention(user)} :white_check_mark: https://xgm.guru/user/${xgmid}`
+            `Перепривязка аккаунта ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
+            `Привязка аккаунта ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}`
         );
-        SendPM(user, ':white_check_mark: Аккаунт подтвержден!');
+        SendPM(user, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
 
         retCode = 200;
     }
