@@ -2,13 +2,13 @@
 
 require('./log.js');
 
-process.on('uncaughtException', console.error);
-process.on('unhandledRejection', console.error);
-
 const Shutdown = err => {
     console.error(err);
     process.exit(1);
 };
+
+process.on('uncaughtException', Shutdown);
+process.on('unhandledRejection', Shutdown);
 
 !process.env.TOKEN && Shutdown('Token required.');
 
