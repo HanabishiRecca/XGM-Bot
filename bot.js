@@ -769,7 +769,13 @@ const webApiFuncs = {
             return response.statusCode = 400;
 
         const text = data.toString();
-        SendMessage(config.channel.system, (text.length > 2000) ? text.substring(0, 1999) : text);
+        try {
+            await SendMessage(config.channel.system, (text.length > 2000) ? text.substring(0, 1999) : text);
+            response.statusCode = 200;
+        } catch(e) {
+            console.warn(e);
+            response.statusCode = 403;
+        }
 
         response.statusCode = 200;
     },
