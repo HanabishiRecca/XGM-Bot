@@ -51,7 +51,7 @@ const
     Routes = Discord.Routes,
     Permissions = Discord.Permissions,
     ConnectedServers = new Map(),
-    SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(() => resolve(null)));
+    SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(error => { console.warn(error); resolve(null); }));
 
 const
     AddReaction = (channel, message, emoji) => client.Request('put', Routes.Reaction(channel, message, emoji) + '/@me'),
