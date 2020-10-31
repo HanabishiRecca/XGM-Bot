@@ -763,6 +763,25 @@ const webApiFuncs = {
         response.statusCode = 200;
     },
 
+    '/send': async (request, response) => {
+        const channelid = request.headers.channelid;
+        if(!channelid)
+            return response.statusCode = 400;
+
+        const data = await SafePromise(Misc.ReadIncomingData(request));
+        if(!data)
+            return response.statusCode = 400;
+
+        const text = data.toString();
+        try {
+            await SendMessage(channelid, (text.length > 2000) ? text.substring(0, 1999) : text);
+            response.statusCode = 200;
+        } catch(e) {
+            console.warn(e);
+            response.statusCode = 403;
+        }
+    },
+
     '/sys': async (request, response) => {
         const data = await SafePromise(Misc.ReadIncomingData(request));
         if(!data)
