@@ -1,8 +1,9 @@
 'use strict';
 
 const
+    util = require('util'),
     CurrentDT = () => new Date().toLocaleString('ru'),
-    ToString = value => (typeof value == 'object') ? JSON.stringify(value, null, 4) : value;
+    ToString = value => (typeof value == 'object') ? JSON.stringify(util.inspect(value), null, 4) : value;
 
 const ConsoleLog = console.log;
 console.log = (message, ...params) => ConsoleLog(`[${CurrentDT()}] ${ToString(message)}`, ...params);
