@@ -210,7 +210,7 @@ const SyncUser = async (userid, xgmid, banned) => {
     } else if(status == 'suspended') {
         if(!banned.has(userid))
             await SafePromise(BanUser(config.server, userid, 'Бан на сайте'));
-        member = null;
+        return;
     } else {
         if(member) {
             if(HasRole(member, config.role.readonly))
