@@ -239,25 +239,29 @@ const SyncUser = async (userid, xgmid, banned) => {
 };
 
 const SyncUsers = async () => {
+    const
+        bans = await GetBans(config.server),
+        banned = new Set();
+
+    for(const banInfo of bans)
+        banned.add(banInfo.user.id);
+
+    const
+        users = await usersDb.find({}),
+        xgms = new Set();
+
     try {
-        const
-            bans = await GetBans(config.server),
-            banned = new Set();
-
-        for(const banInfo of bans)
-            banned.add(banInfo.user.id);
-
-        const
-            users = await usersDb.find({}),
-            xgms = new Set();
-
         for(const userInfo of users) {
             xgms.add(userInfo._id);
             await SyncUser(userInfo._id, userInfo.xgmid, banned);
         }
+    } catch(e) {
+        console.error(e);
+    }
 
+    try {
         for(const member of ConnectedServers.get(config.server).members)
-            if(!xgms.has(member.user.id) && HasRole(member, config.role.user))
+            if(member.user && !xgms.has(member.user.id) && HasRole(member, config.role.user))
                 await RemoveRole(config.server, member.user, config.role.user);
     } catch(e) {
         console.error(e);
