@@ -207,24 +207,25 @@ const SyncUser = async (userid, xgmid, banned) => {
         status = response.state.access.staff_status,
         member = ConnectedServers.get(config.server).members.get(userid);
 
-    if(status == 'readonly') {
-        if(member && !HasRole(member, config.role.readonly))
-            await AddRole(config.server, member.user, config.role.readonly);
-    } else if(status == 'suspended') {
-        if(!banned.has(userid))
+    if(status == 'suspended') {
+        if(member || !banned.has(userid))
             await BanUser(config.server, userid, 'Бан на сайте');
         return;
-    } else {
-        if(member) {
-            if(HasRole(member, config.role.readonly))
-                await RemoveRole(config.server, userid, config.role.readonly);
-        } else if(banned.has(userid)) {
-            await UnbanUser(config.server, userid);
-        }
     }
 
-    if(!member)
+    if(!member) {
+        if(banned.has(userid))
+            await UnbanUser(config.server, userid);
         return;
+    }
+
+    if(status == 'readonly') {
+        if(!HasRole(member, config.role.readonly))
+            await AddRole(config.server, member.user, config.role.readonly);
+    } else {
+        if(HasRole(member, config.role.readonly))
+            await RemoveRole(config.server, userid, config.role.readonly);
+    }
 
     if(!HasRole(member, config.role.user))
         await AddRole(config.server, member.user, config.role.user);
@@ -688,22 +689,25 @@ const webApiFuncs = {
         if(!userInfo)
             return response.statusCode = 200;
 
-        const member = ConnectedServers.get(config.server).members.get(userInfo._id);
-
-        if(status == 'readonly') {
-            if(member && !HasRole(member, config.role.readonly))
-                SafePromise(AddRole(config.server, userInfo._id, config.role.readonly));
-            SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил **Read only** на сайте.\n${XgmUserLink(xgmid)}`));
-        } else if(status == 'suspended') {
+        if(status == 'suspended') {
             SafePromise(BanUser(config.server, userInfo._id, 'Бан на сайте'));
             SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил бан на сайте.\n${XgmUserLink(xgmid)}`));
+            return response.statusCode = 200;
+        }
+
+        SafePromise(UnbanUser(config.server, userInfo._id));
+
+        const member = ConnectedServers.get(config.server).members.get(userInfo._id);
+        if(!member)
+            return response.statusCode = 200;
+
+        if(status == 'readonly') {
+            if(!HasRole(member, config.role.readonly))
+                SafePromise(AddRole(config.server, userInfo._id, config.role.readonly));
+            SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил **Read only** на сайте.\n${XgmUserLink(xgmid)}`));
         } else {
-            if(member) {
-                if(HasRole(member, config.role.readonly))
-                    SafePromise(RemoveRole(config.server, userInfo._id, config.role.readonly));
-            } else {
-                SafePromise(UnbanUser(config.server, userInfo._id));
-            }
+            if(HasRole(member, config.role.readonly))
+                SafePromise(RemoveRole(config.server, userInfo._id, config.role.readonly));
         }
 
         response.statusCode = 200;
