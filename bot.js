@@ -260,8 +260,8 @@ const SyncUsers = async () => {
     }
 
     try {
-        for(const member of ConnectedServers.get(config.server).members)
-            if(member.user && !xgms.has(member.user.id) && HasRole(member, config.role.user))
+        for(const member of ConnectedServers.get(config.server).members.values())
+            if(member && !xgms.has(member.user.id) && HasRole(member, config.role.user))
                 await RemoveRole(config.server, member.user, config.role.user);
     } catch(e) {
         console.error(e);
