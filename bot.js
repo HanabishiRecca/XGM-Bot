@@ -247,9 +247,18 @@ const SyncUsers = async () => {
         for(const banInfo of bans)
             banned.add(banInfo.user.id);
 
-        const users = await usersDb.find({});
-        for(const userInfo of users)
+        const
+            users = await usersDb.find({}),
+            xgms = new Set();
+
+        for(const userInfo of users) {
+            xgms.add(userInfo._id);
             await SyncUser(userInfo._id, userInfo.xgmid, banned);
+        }
+
+        for(const member of ConnectedServers.get(config.server).members)
+            if(!xgms.has(member.user.id) && HasRole(member, config.role.user))
+                await RemoveRole(config.server, member.user, config.role.user);
     } catch(e) {
         console.error(e);
     }
