@@ -668,7 +668,7 @@ const webApiFuncs = {
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             RemoveRole(config.server, userInfo._id, config.role.user);
 
-        SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален или забанен.');
+        SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален.');
 
         response.statusCode = 200;
     },
