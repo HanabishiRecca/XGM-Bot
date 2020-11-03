@@ -27,8 +27,7 @@ const
 
 const
     appDb = new Database({ filename: `${storagePath}/app.db`, autoload: true }),
-    usersDb = new Database({ filename: `${storagePath}/users.db`, autoload: true }),
-    warnsDb = new Database({ filename: `${storagePath}/warns.db`, autoload: true });
+    usersDb = new Database({ filename: `${storagePath}/users.db`, autoload: true });
 
 const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE && process.env.MDB_USER && process.env.MDB_PASSWORD) ? {
     host: process.env.MDB_HOST,
@@ -47,45 +46,26 @@ client.on('error', console.error);
 client.on('fatal', Shutdown);
 
 const
-    warnPeriod = 86400000,
     Routes = Discord.Routes,
-    Permissions = Discord.Permissions,
     ConnectedServers = new Map(),
     SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(error => { console.warn(error); resolve(null); }));
 
 const
     AddReaction = (channel, message, emoji) => client.Request('put', Routes.Reaction(channel, message, emoji) + '/@me'),
     AddRole = (server, user, role) => client.Request('put', Routes.Role(server, user, role)),
+    BanUser = (server, user, reason) => client.Request('put', `${Routes.Server(server)}/bans/${user.id || user}?reason=${encodeURI(reason)}`),
+    GetBans = server => client.Request('get', Routes.Server(server) + '/bans'),
     GetMessage = (channel, message) => client.Request('get', Routes.Message(channel, message)),
-    GetUser = userId => client.Request('get', Routes.User(userId)),
     GetUserChannel = user => client.Request('post', Routes.User('@me') + '/channels', { recipient_id: user.id || user }),
     RemoveRole = (server, user, role) => client.Request('delete', Routes.Role(server, user, role)),
-    SendMessage = (channel, content, embed) => client.Request('post', Routes.Channel(channel) + '/messages', { content, embed });
+    SendMessage = (channel, content, embed) => client.Request('post', Routes.Channel(channel) + '/messages', { content, embed }),
+    UnbanUser = (server, user) => client.Request('delete', `${Routes.Server(server)}/bans/${user.id || user}`);
 
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
-    CheckPermission = (permissions, flag) => ((permissions & Permissions.ADMINISTRATOR) > 0) || ((permissions & flag) === flag),
+    HasRole = (member, role) => member.roles.indexOf(role.id || role) > -1,
     UserMention = user => `<@${user.id || user}>`,
     XgmUserLink = xgmid => `https://xgm.guru/user/${xgmid}`;
-
-const HasPermission = (server, member, flag) => {
-    const
-        serverRoles = server.roles,
-        roles = member.roles;
-
-    for(let i = 0; i < roles.length; i++) {
-        const role = serverRoles.get(roles[i]);
-        if(role && CheckPermission(role.permissions, flag))
-            return true;
-    }
-
-    return false;
-};
-
-const FormatWarn = (warnState, time) => {
-    const result = `Нарушения ${warnState.warns}/${config.maxWarns}, снятие через ${Misc.FormatWarnTime(warnState.dt + warnPeriod - time)}`;
-    return (warnState.warns < config.maxWarns) ? result : `${result}, в **Read only** на ${Misc.FormatWarnTime(warnState.dt + ((warnState.warns - config.maxWarns + 1) * warnPeriod) - time)}`;
-};
 
 const SendPM = async (user, msg) => await SafePromise(SendMessage(await GetUserChannel(user), msg));
 
@@ -93,14 +73,8 @@ const botCommands = {
     help: async message => {
         SendMessage(message.channel_id, `**Справка**
 
-**Команды для всех**
 \`who @user\` - получить информацию о привязке указанного пользователя.
-\`status\` - узнать свой статус предупреждений.
 \`help\` - показать данное сообщение.
-
-**Команды для модераторов**
-\`warn @user\` - выдать предупреждение указанному пользователю.
-\`list\` - показать список нарушителей.
 
 *Команды можно отправлять боту в ЛС.*
 *Для упоминания любого пользователя в дискорде можно использовать его ID в виде \`<@ID>\`.*`);
@@ -111,98 +85,11 @@ const botCommands = {
             return;
 
         const userData = await usersDb.findOne({ _id: message.mentions[0] });
-        message.reply(userData ? `https://xgm.guru/user/${userData.xgmid}` : 'Пользователь не сопоставлен.');
-    },
-
-    warn: async message => {
-        if(!(message.mentions && message.mentions.length))
-            return;
-
-        if(!HasPermission(message.server, message.member, Permissions.MANAGE_MESSAGES))
-            return;
-
-        const userId = message.mentions[0];
-        if(userId == client.user.id)
-            return;
-
-        const user = await SafePromise(GetUser(userId));
-        if(!user)
-            return message.reply('Указанный пользователь не существует.');
-
-        const member = message.server.members.get(user.id);
-        if(member && HasPermission(message.server, member, Permissions.MANAGE_MESSAGES))
-            return;
-
-        const
-            warnState = await warnsDb.findOne({ _id: user.id }),
-            warns = warnState ? (warnState.warns + 1) : 1;
-
-        if(warns >= config.maxWarns)
-            SafePromise(AddRole(message.server, user, config.role.readonly));
-
-        await warnsDb.update({ _id: user.id }, { $set: { warns: warns, dt: Date.now() } }, { upsert: true });
-
-        SendMessage(config.channel.log, `Пользователь ${UserMention(user)} получил предупреждение ${warns}/${config.maxWarns}!\nВыдано модератором ${UserMention(message.author)}`);
-        SendPM(user, `Вы получили предупреждение ${warns}/${config.maxWarns}!`);
-    },
-
-    list: async message => {
-        if(!HasPermission(message.server, message.member, Permissions.MANAGE_MESSAGES))
-            return;
-
-        const
-            warnStates = await warnsDb.find({}),
-            now = Date.now();
-
-        let text = `**Нарушителей:** ${warnStates.length}\n\n`;
-        for(let i = 0; i < warnStates.length; i++) {
-            const
-                warnState = warnStates[i],
-                add = `${UserMention(warnState._id)} → ${FormatWarn(warnState, now)}\n`;
-
-            if(text.length + add.length < 2000) {
-                text += add;
-            } else {
-                SendMessage(message.channel_id, text);
-                text = add;
-            }
-        }
-
-        SendMessage(message.channel_id, text);
-    },
-
-    status: async message => {
-        const warnState = await warnsDb.findOne({ _id: message.author.id });
-        message.reply(warnState ? FormatWarn(warnState, Date.now()) : 'Нет предупреждений.');
+        message.reply(userData ? XgmUserLink(userData.xgmid) : 'Пользователь не сопоставлен.');
     },
 };
 
 botCommands.whois = botCommands.who;
-
-const WarnTick = async () => {
-    const warnStates = await warnsDb.find({});
-    if(warnStates.length < 1)
-        return;
-
-    const now = Date.now();
-    for(let i = 0; i < warnStates.length; i++) {
-        const warnState = warnStates[i];
-        if((warnState.dt + warnPeriod) > now)
-            continue;
-
-        warnState.warns--;
-
-        if(warnState.warns > 0)
-            await warnsDb.update({ _id: warnState._id }, { $set: { warns: warnState.warns, dt: warnState.dt + warnPeriod } });
-        else
-            await warnsDb.remove({ _id: warnState._id });
-
-        if(warnState.warns < config.maxWarns)
-            SafePromise(RemoveRole(config.server, warnState._id, config.role.readonly));
-    }
-};
-
-setInterval(WarnTick, 60000);
 
 const MarkMessages = (() => {
     const
@@ -308,35 +195,64 @@ const CheckNews = async () => {
 
 setInterval(CheckNews, 600000);
 
-const CheckTwilight = async (server, member, xgmid) => {
-    const response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+const SyncUser = async (userid, xgmid, banned) => {
+    const response = JSON.parse(await SafePromise(Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`)));
     if(!response)
         return;
 
-    if(response.info.user.seeTwilight) {
-        if(member.roles.indexOf(config.role.twilight) < 0)
-            await AddRole(server, member.user, config.role.twilight);
-    } else {
-        if(member.roles.indexOf(config.role.twilight) > -1)
-            await RemoveRole(server, member.user, config.role.twilight);
-    }
-};
-
-const SyncTwilight = async () => {
     const
-        server = ConnectedServers.get(config.server),
-        users = await usersDb.find({});
+        status = response.state.access.staff_status,
+        member = ConnectedServers.get(config.server).members.get(userid);
 
-    for(let i = 0; i < users.length; i++) {
-        const
-            userInfo = users[i],
-            member = server.members.get(userInfo._id);
+    if(status == 'readonly') {
+        if(member && !HasRole(member, config.role.readonly))
+            await AddRole(config.server, member.user, config.role.readonly);
+    } else if(status == 'suspended') {
+        if(!banned.has(userid))
+            await SafePromise(BanUser(config.server, userid, 'Бан на сайте'));
+        member = null;
+    } else {
+        if(member) {
+            if(HasRole(member, config.role.readonly))
+                await RemoveRole(config.server, userid, config.role.readonly);
+        } else if(banned.has(userid)) {
+            await SafePromise(UnbanUser(config.server, userid));
+        }
+    }
 
-        member && await CheckTwilight(server, member, userInfo.xgmid);
+    if(!member)
+        return;
+
+    if(!HasRole(member, config.role.user))
+        await AddRole(config.server, member.user, config.role.user);
+
+    if(response.info.user.seeTwilight) {
+        if(!HasRole(member, config.role.twilight))
+            await AddRole(config.server, member.user, config.role.twilight);
+    } else {
+        if(HasRole(member, config.role.twilight))
+            await RemoveRole(config.server, member.user, config.role.twilight);
     }
 };
 
-setInterval(SyncTwilight, 3600000);
+const SyncUsers = async () => {
+    try {
+        const
+            bans = await GetBans(config.server),
+            banned = new Set();
+
+        for(const banInfo of bans)
+            banned.add(banInfo.user.id);
+
+        const users = await usersDb.find({});
+        for(const userInfo of users)
+            await SyncUser(userInfo._id, userInfo.xgmid, banned);
+    } catch(e) {
+        console.error(e);
+    }
+};
+
+setInterval(SyncUsers, 3600000);
 
 const SaveMessage = async message => {
     if(!mdbConnectionOptions)
@@ -393,6 +309,8 @@ const AddServer = server => {
 const UpdateServer = (server, update) => {
     server.roles = GenRolesMap(update.roles);
 };
+
+const FakeSetAns = { has: () => false };
 
 const events = {
     READY: async data => {
@@ -527,15 +445,8 @@ const events = {
 
         SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user)} присоединился к серверу.`);
 
-        const warnState = await warnsDb.findOne({ _id: member.user.id });
-        if(warnState && (warnState.warns >= config.maxWarns))
-            AddRole(member.guild_id, member.user, config.role.readonly);
-
         const userInfo = await usersDb.findOne({ _id: member.user.id });
-        if(userInfo) {
-            AddRole(member.guild_id, member.user, config.role.user);
-            CheckTwilight(member.guild_id, member, userInfo.xgmid);
-        }
+        userInfo && SyncUser(userInfo._id, userInfo.xgmid, FakeSetAns);
     },
 
     GUILD_MEMBER_UPDATE: async member => {
@@ -601,8 +512,8 @@ const events = {
             map.set(member.user.id, member);
         }
 
-        if((server.id == config.server) && (chunk.members.length < 1000))
-            SyncTwilight();
+        if((server.id == config.server) && (chunk.chunk_index >= chunk.chunk_count - 1))
+            SyncUsers();
     },
 
     GUILD_ROLE_CREATE: async data => {
@@ -730,7 +641,7 @@ const webApiFuncs = {
 
         console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
-        SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: https://xgm.guru/user/${xgmid}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
+        SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             RemoveRole(config.server, userInfo._id, config.role.user);
@@ -741,6 +652,35 @@ const webApiFuncs = {
     },
 
     '/update-global-status': async (request, response) => {
+        const xgmid = Number(request.headers.userid);
+        if(!(xgmid > 0))
+            return response.statusCode = 400;
+
+        const status = request.headers.status || '';
+        console.log(`S: ${xgmid} - '${status}'`);
+
+        const userInfo = await usersDb.findOne({ xgmid });
+        if(!userInfo)
+            return response.statusCode = 200;
+
+        const member = ConnectedServers.get(config.server).members.get(userInfo._id);
+
+        if(status == 'readonly') {
+            if(member && !HasRole(member, config.role.readonly))
+                SafePromise(AddRole(config.server, userInfo._id, config.role.readonly));
+            SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил **Read only** на сайте.\n${XgmUserLink(xgmid)}`));
+        } else if(status == 'suspended') {
+            SafePromise(BanUser(config.server, userInfo._id, 'Бан на сайте'));
+            SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил бан на сайте.\n${XgmUserLink(xgmid)}`));
+        } else {
+            if(member) {
+                if(HasRole(member, config.role.readonly))
+                    SafePromise(RemoveRole(config.server, userInfo._id, config.role.readonly));
+            } else {
+                SafePromise(UnbanUser(config.server, userInfo._id));
+            }
+        }
+
         response.statusCode = 200;
     },
 
@@ -810,6 +750,7 @@ const HandleRequest = async (request, response) => {
     if(!(request.url && webApiFuncs.hasOwnProperty(request.url)))
         return response.statusCode = 404;
 
+    console.log(`POST '${request.url}'`);
     await webApiFuncs[request.url](request, response);
 };
 
