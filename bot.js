@@ -196,6 +196,9 @@ const CheckNews = async () => {
 setInterval(CheckNews, 600000);
 
 const SyncUser = async (userid, xgmid, banned) => {
+    if(userid == client.user.id)
+        return;
+
     const response = JSON.parse(await SafePromise(Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`)));
     if(!response)
         return;
@@ -562,6 +565,9 @@ const VerifyUser = async (code, xgmid) => {
         return 500;
     }
 
+    if(user.id == client.user.id)
+        return 418;
+
     let retCode;
     const userInfo = await usersDb.findOne({ _id: user.id });
     if(userInfo) {
@@ -633,6 +639,9 @@ const webApiFuncs = {
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
+        if(userInfo._id == client.user.id)
+            return response.statusCode = 418;
+
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
             return response.statusCode = 406;
@@ -655,6 +664,9 @@ const webApiFuncs = {
         const xgmid = Number(request.headers.userid);
         if(!(xgmid > 0))
             return response.statusCode = 400;
+
+        if(userInfo._id == client.user.id)
+            return response.statusCode = 418;
 
         const status = request.headers.status || '';
         console.log(`S: ${xgmid} - '${status}'`);
@@ -688,6 +700,9 @@ const webApiFuncs = {
         const xgmid = Number(request.headers.userid);
         if(!(xgmid > 0))
             return response.statusCode = 400;
+
+        if(userInfo._id == client.user.id)
+            return response.statusCode = 418;
 
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
