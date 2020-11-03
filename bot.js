@@ -212,14 +212,14 @@ const SyncUser = async (userid, xgmid, banned) => {
             await AddRole(config.server, member.user, config.role.readonly);
     } else if(status == 'suspended') {
         if(!banned.has(userid))
-            await SafePromise(BanUser(config.server, userid, 'Бан на сайте'));
+            await BanUser(config.server, userid, 'Бан на сайте');
         return;
     } else {
         if(member) {
             if(HasRole(member, config.role.readonly))
                 await RemoveRole(config.server, userid, config.role.readonly);
         } else if(banned.has(userid)) {
-            await SafePromise(UnbanUser(config.server, userid));
+            await UnbanUser(config.server, userid);
         }
     }
 
