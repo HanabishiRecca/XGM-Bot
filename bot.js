@@ -653,12 +653,12 @@ const webApiFuncs = {
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
-        if(userInfo._id == client.user.id)
-            return response.statusCode = 418;
-
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
             return response.statusCode = 406;
+
+        if(userInfo._id == client.user.id)
+            return response.statusCode = 418;
 
         const data = await SafePromise(Misc.ReadIncomingData(request));
 
@@ -679,15 +679,15 @@ const webApiFuncs = {
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
-        if(userInfo._id == client.user.id)
-            return response.statusCode = 418;
-
         const status = request.headers.status || '';
         console.log(`S: ${xgmid} - '${status}'`);
 
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
             return response.statusCode = 200;
+
+        if(userInfo._id == client.user.id)
+            return response.statusCode = 418;
 
         if(status == 'suspended') {
             SafePromise(BanUser(config.server, userInfo._id, 'Бан на сайте'));
@@ -718,12 +718,12 @@ const webApiFuncs = {
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
-        if(userInfo._id == client.user.id)
-            return response.statusCode = 418;
-
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
             return response.statusCode = 406;
+
+        if(userInfo._id == client.user.id)
+            return response.statusCode = 418;
 
         const data = await SafePromise(Misc.ReadIncomingData(request));
         if(!data)
