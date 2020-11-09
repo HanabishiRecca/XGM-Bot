@@ -618,11 +618,7 @@ const VerifyUser = async (code, xgmid) => {
         retCode = 200;
     }
 
-    const member = ConnectedServers.get(config.server).members.get(user.id);
-    if(member) {
-        AddRole(config.server, user, config.role.user);
-        CheckTwilight(config.server, member, xgmid);
-    }
+    SyncUser(user.id, xgmid, FakeSetAns);
 
     return { code: retCode, content: user.id };
 };
