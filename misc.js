@@ -3,24 +3,6 @@
 const htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' };
 exports.DecodeHtmlEntity = str => str.replace(/&amp;/g, '&').replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
 
-exports.FormatWarnTime = time => {
-    let result = '';
-
-    const days = Math.trunc(time / 86400000);
-    if(days)
-        result += `${days} д `;
-
-    const hours = Math.trunc((time % 86400000) / 3600000);
-    if(hours)
-        result += `${hours} ч `;
-
-    const minutes = Math.trunc((time % 3600000) / 60000);
-    if(minutes)
-        result += `${minutes} мин`;
-
-    return result;
-};
-
 const ReadIncomingData = incoming => new Promise((resolve, reject) => {
     const chunks = [];
     let dataLen = 0;
