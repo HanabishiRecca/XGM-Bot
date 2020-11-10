@@ -656,7 +656,7 @@ const webApiFuncs = {
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        const data = await SafePromise(Misc.ReadIncomingData(request));
+        const data = await Misc.ReadIncomingData(request);
 
         console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
@@ -721,7 +721,11 @@ const webApiFuncs = {
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        const data = await SafePromise(Misc.ReadIncomingData(request));
+        const len = Number(request.headers['Content-Length']);
+        if(len > 4000)
+            return response.statusCode = 413;
+
+        const data = await Misc.ReadIncomingData(request);
         if(!data)
             return response.statusCode = 400;
 
@@ -736,7 +740,11 @@ const webApiFuncs = {
         if(!channelid)
             return response.statusCode = 400;
 
-        const data = await SafePromise(Misc.ReadIncomingData(request));
+        const len = Number(request.headers['Content-Length']);
+        if(len > 4000)
+            return response.statusCode = 413;
+
+        const data = await Misc.ReadIncomingData(request);
         if(!data)
             return response.statusCode = 400;
 
@@ -751,7 +759,11 @@ const webApiFuncs = {
     },
 
     '/sys': async (request, response) => {
-        const data = await SafePromise(Misc.ReadIncomingData(request));
+        const len = Number(request.headers['Content-Length']);
+        if(len > 4000)
+            return response.statusCode = 413;
+
+        const data = await Misc.ReadIncomingData(request);
         if(!data)
             return response.statusCode = 400;
 
