@@ -329,6 +329,8 @@ const UpdateServer = (server, update) => {
     server.roles = GenRolesMap(update.roles);
 };
 
+let firstUsersSync = true;
+
 const events = {
     READY: async data => {
         client.user = data.user;
@@ -529,8 +531,10 @@ const events = {
             map.set(member.user.id, member);
         }
 
-        if((server.id == config.server) && (chunk.chunk_index >= chunk.chunk_count - 1))
+        if(firstUsersSync && (server.id == config.server) && (chunk.chunk_index >= chunk.chunk_count - 1)) {
+            firstUsersSync = false;
             SyncUsers();
+        }
     },
 
     GUILD_ROLE_CREATE: async data => {
