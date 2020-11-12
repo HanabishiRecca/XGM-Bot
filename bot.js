@@ -64,6 +64,7 @@ const
 const
     ChannelMention = channel => `<#${channel.id || channel}>`,
     HasRole = (member, role) => member.roles.indexOf(role.id || role) > -1,
+    InProject = status => (status == 'leader') || (status == 'moderator') || (status == 'active'),
     UserMention = user => `<@${user.id || user}>`,
     XgmUserLink = xgmid => `https://xgm.guru/user/${xgmid}`;
 
@@ -195,6 +196,16 @@ const CheckNews = async () => {
 
 setInterval(CheckNews, 600000);
 
+const RoleSwitch = async (member, role, enable) => {
+    if(enable) {
+        if(!HasRole(member, role))
+            await AddRole(config.server, member.user, role);
+    } else {
+        if(HasRole(member, role))
+            await RemoveRole(config.server, member.user, role);
+    }
+};
+
 const SyncUser = async (userid, xgmid, banned) => {
     if(userid == client.user.id)
         return;
@@ -208,35 +219,22 @@ const SyncUser = async (userid, xgmid, banned) => {
         member = ConnectedServers.get(config.server).members.get(userid);
 
     if(status == 'suspended') {
-        if(member || !banned.has(userid))
+        if(member || !banned)
             await BanUser(config.server, userid, 'Бан на сайте');
         return;
     }
 
     if(!member) {
-        if(banned.has(userid))
+        if(banned)
             await UnbanUser(config.server, userid);
         return;
     }
 
-    if(status == 'readonly') {
-        if(!HasRole(member, config.role.readonly))
-            await AddRole(config.server, member.user, config.role.readonly);
-    } else {
-        if(HasRole(member, config.role.readonly))
-            await RemoveRole(config.server, userid, config.role.readonly);
-    }
-
-    if(!HasRole(member, config.role.user))
-        await AddRole(config.server, member.user, config.role.user);
-
-    if(response.info.user.seeTwilight) {
-        if(!HasRole(member, config.role.twilight))
-            await AddRole(config.server, member.user, config.role.twilight);
-    } else {
-        if(HasRole(member, config.role.twilight))
-            await RemoveRole(config.server, member.user, config.role.twilight);
-    }
+    await RoleSwitch(member, config.role.readonly, status == 'readonly');
+    await RoleSwitch(member, config.role.user, true);
+    await RoleSwitch(member, config.role.staff, InProject(status));
+    await RoleSwitch(member, config.role.team, response.state.projects['833'] && InProject(response.state.projects['833'].status));
+    await RoleSwitch(member, config.role.twilight, response.info.user.seeTwilight);
 };
 
 const SyncUsers = async () => {
@@ -247,23 +245,27 @@ const SyncUsers = async () => {
     for(const banInfo of bans)
         banned.add(banInfo.user.id);
 
-    const
-        users = await usersDb.find({}),
-        xgms = new Set();
-
+    const users = await usersDb.find({});
     try {
-        for(const userInfo of users) {
-            xgms.add(userInfo._id);
-            await SyncUser(userInfo._id, userInfo.xgmid, banned);
-        }
+        for(const userInfo of users)
+            await SyncUser(userInfo._id, userInfo.xgmid, banned.has(userInfo._id));
     } catch(e) {
         console.error(e);
     }
 
+    const xgms = new Set();
+    for(const userInfo of users)
+        xgms.add(userInfo._id);
+
     try {
         for(const member of ConnectedServers.get(config.server).members.values())
-            if(member && !xgms.has(member.user.id) && HasRole(member, config.role.user))
-                await RemoveRole(config.server, member.user, config.role.user);
+            if(member && !xgms.has(member.user.id)) {
+                await RoleSwitch(member, config.role.readonly, false);
+                await RoleSwitch(member, config.role.user, false);
+                await RoleSwitch(member, config.role.staff, false);
+                await RoleSwitch(member, config.role.team, false);
+                await RoleSwitch(member, config.role.twilight, false);
+            }
     } catch(e) {
         console.error(e);
     }
@@ -326,8 +328,6 @@ const AddServer = server => {
 const UpdateServer = (server, update) => {
     server.roles = GenRolesMap(update.roles);
 };
-
-const FakeSetAns = { has: () => false };
 
 const events = {
     READY: async data => {
@@ -463,7 +463,7 @@ const events = {
         SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user)} присоединился к серверу.`);
 
         const userInfo = await usersDb.findOne({ _id: member.user.id });
-        userInfo && SyncUser(userInfo._id, userInfo.xgmid, FakeSetAns);
+        userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
     },
 
     GUILD_MEMBER_UPDATE: async member => {
@@ -618,7 +618,7 @@ const VerifyUser = async (code, xgmid) => {
         retCode = 200;
     }
 
-    SyncUser(user.id, xgmid, FakeSetAns);
+    SyncUser(user.id, xgmid, false);
 
     return { code: retCode, content: user.id };
 };
