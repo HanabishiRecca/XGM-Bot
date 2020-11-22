@@ -273,6 +273,17 @@ const SyncUsers = async () => {
 
 setInterval(SyncUsers, 3600000);
 
+const CheckBan = async (data, flag) => {
+    if(!((data.guild_id == config.server) && data.user))
+        return;
+
+    const userInfo = await usersDb.findOne({ _id: data.user.id });
+    if(!userInfo)
+        return;
+
+    SyncUser(data.user.id, userInfo._id, flag);
+};
+
 const SaveMessage = async message => {
     if(!mdbConnectionOptions)
         return;
@@ -551,6 +562,10 @@ const events = {
         const server = ConnectedServers.get(data.guild_id);
         server && server.roles.delete(data.role_id);
     },
+
+    GUILD_BAN_ADD: data => CheckBan(data, true),
+
+    GUILD_BAN_REMOVE: data => CheckBan(data, false),
 };
 
 client.on('packet', async packet => {
@@ -559,7 +574,14 @@ client.on('packet', async packet => {
 });
 
 client.Auth(process.env.TOKEN);
-client.Connect(Discord.Intents.GUILDS | Discord.Intents.GUILD_MEMBERS | Discord.Intents.GUILD_MESSAGES | Discord.Intents.GUILD_MESSAGE_REACTIONS | Discord.Intents.DIRECT_MESSAGES);
+client.Connect(
+    Discord.Intents.GUILDS |
+    Discord.Intents.GUILD_MEMBERS |
+    Discord.Intents.GUILD_BANS |
+    Discord.Intents.GUILD_MESSAGES |
+    Discord.Intents.GUILD_MESSAGE_REACTIONS |
+    Discord.Intents.DIRECT_MESSAGES
+);
 
 if(!(process.env.AUTH_SVC && process.env.CLIENT_ID && process.env.CLIENT_SECRET && process.env.REDIRECT_URL))
     return;
