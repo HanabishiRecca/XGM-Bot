@@ -1,15 +1,12 @@
 'use strict';
 
-const
-    util = require('util'),
-    CurrentDT = () => new Date().toLocaleString('ru'),
-    ToString = value => (typeof value == 'object') ? JSON.stringify(util.inspect(value), null, 4) : value;
+const CurrentDT = () => new Date().toLocaleString('ru');
 
 const ConsoleLog = console.log;
-console.log = (message, ...params) => ConsoleLog(`[${CurrentDT()}] ${ToString(message)}`, ...params);
+console.log = (...params) => ConsoleLog(`[${CurrentDT()}]`, ...params);
 
 const ConsoleWarn = console.warn;
-console.warn = (message, ...params) => ConsoleWarn(`\x1b[93m[${CurrentDT()}] ${ToString(message)}\x1b[0m`, ...params);
+console.warn = (...params) => ConsoleWarn('\x1b[93m', `[${CurrentDT()}]`, ...params, '\x1b[0m');
 
 const ConsoleError = console.error;
-console.error = (message, ...params) => ConsoleError(`\x1b[31m[${CurrentDT()}] ${ToString(message)}\x1b[0m`, ...params);
+console.error = (...params) => ConsoleError('\x1b[31m', `[${CurrentDT()}]`, ...params, '\x1b[0m');
