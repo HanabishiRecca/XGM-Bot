@@ -4,6 +4,7 @@ require('./log.js');
 
 const Shutdown = err => {
     console.error(err);
+    console.log('SHUTDOWN');
     process.exit(1);
 };
 
