@@ -55,6 +55,7 @@ const
     AddReaction = (channel, message, emoji) => client.Request('put', Routes.Reaction(channel, message, emoji) + '/@me'),
     AddRole = (server, user, role) => client.Request('put', Routes.Role(server, user, role)),
     BanUser = (server, user, reason) => client.Request('put', `${Routes.Server(server)}/bans/${user.id || user}?reason=${encodeURI(reason)}`),
+    GetBan = (server, user) => client.Request('get', `${Routes.Server(server)}/bans/${user.id || user}`),
     GetBans = server => client.Request('get', Routes.Server(server) + '/bans'),
     GetMessage = (channel, message) => client.Request('get', Routes.Message(channel, message)),
     GetUserChannel = user => client.Request('post', Routes.User('@me') + '/channels', { recipient_id: user.id || user }),
@@ -712,26 +713,9 @@ const webApiFuncs = {
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        if(status == 'suspended') {
-            SafePromise(BanUser(config.server, userInfo._id, 'Бан на сайте'));
-            SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил бан на сайте.\n${XgmUserLink(xgmid)}`));
-            return response.statusCode = 200;
-        }
-
-        SafePromise(UnbanUser(config.server, userInfo._id));
-
-        const member = ConnectedServers.get(config.server).members.get(userInfo._id);
-        if(!member)
-            return response.statusCode = 200;
-
-        if(status == 'readonly') {
-            if(!HasRole(member, config.role.readonly))
-                SafePromise(AddRole(config.server, userInfo._id, config.role.readonly));
-            SafePromise(SendMessage(config.channel.log, `Пользователь ${UserMention(userInfo._id)} получил **Read only** на сайте.\n${XgmUserLink(xgmid)}`));
-        } else {
-            if(HasRole(member, config.role.readonly))
-                SafePromise(RemoveRole(config.server, userInfo._id, config.role.readonly));
-        }
+        (async () => {
+            SyncUser(userInfo._id, xgmid, await SafePromise(GetBan(config.server, userInfo._id)));
+        })();
 
         response.statusCode = 200;
     },
