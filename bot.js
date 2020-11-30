@@ -576,13 +576,13 @@ client.on('packet', async packet => {
 });
 
 client.Auth(process.env.TOKEN);
-client.Connect(
-    Discord.Intents.GUILDS |
-    Discord.Intents.GUILD_MEMBERS |
-    Discord.Intents.GUILD_BANS |
-    Discord.Intents.GUILD_MESSAGES |
-    Discord.Intents.GUILD_MESSAGE_REACTIONS |
-    Discord.Intents.DIRECT_MESSAGES
+client.Connect(0
+    | Discord.Intents.GUILDS
+    | Discord.Intents.GUILD_MEMBERS
+    | Discord.Intents.GUILD_BANS
+    | Discord.Intents.GUILD_MESSAGES
+    | Discord.Intents.GUILD_MESSAGE_REACTIONS
+    | Discord.Intents.DIRECT_MESSAGES
 );
 
 if(!(process.env.AUTH_SVC && process.env.CLIENT_ID && process.env.CLIENT_SECRET && process.env.REDIRECT_URL))
