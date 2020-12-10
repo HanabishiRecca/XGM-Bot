@@ -194,7 +194,7 @@ const CheckNews = async () => {
 
     if(lastTime != maxTime) {
         appDb.update(appOptions.lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
-        appDb.persistence.compactDatafile();
+        appDb.nedb.persistence.compactDatafile();
     }
 };
 
@@ -620,7 +620,7 @@ const VerifyUser = async (code, xgmid) => {
             retCode = 208;
         } else {
             await usersDb.update({ _id: user.id }, { xgmid });
-            usersDb.persistence.compactDatafile();
+            usersDb.nedb.persistence.compactDatafile();
             SendMessage(config.channel.log, `Перепривязка аккаунта XGM ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
             SendPM(user, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
             retCode = 200;
@@ -639,7 +639,7 @@ const VerifyUser = async (code, xgmid) => {
 
         console.log(`Verify: ${user.id} -> ${xgmid}`);
         await usersDb.insert({ _id: user.id, xgmid });
-        usersDb.persistence.compactDatafile();
+        usersDb.nedb.persistence.compactDatafile();
 
         SendMessage(config.channel.log, clone ?
             `Перепривязка аккаунта Discord ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
@@ -692,7 +692,7 @@ const webApiFuncs = {
 
         console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
-        usersDb.persistence.compactDatafile();
+        usersDb.nedb.persistence.compactDatafile();
         SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
