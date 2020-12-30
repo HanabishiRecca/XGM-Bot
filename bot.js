@@ -295,13 +295,16 @@ const SaveMessage = async message => {
     if(!(message.content && message.guild_id))
         return;
 
-    const connection = await MariaDB.createConnection(mdbConnectionOptions);
     try {
-        await connection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content });
+        const connection = await MariaDB.createConnection(mdbConnectionOptions);
+        try {
+            await connection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content });
+        } catch(err) {
+            console.error(err);
+        }
+        connection.end();
     } catch(err) {
         console.error(err);
-    } finally {
-        connection.end();
     }
 };
 
@@ -310,13 +313,16 @@ const LoadMessage = async message => {
         return;
 
     let results;
-    const connection = await MariaDB.createConnection(mdbConnectionOptions);
     try {
-        results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
+        const connection = await MariaDB.createConnection(mdbConnectionOptions);
+        try {
+            results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
+        } catch(err) {
+            console.error(err);
+        }
+        connection.end();
     } catch(err) {
         console.error(err);
-    } finally {
-        connection.end();
     }
 
     if(results && results.length)
