@@ -2,7 +2,7 @@
 
 require('./log.js');
 
-const Shutdown = err => {
+const Shutdown = (err) => {
     console.error(err);
     console.log('SHUTDOWN');
     process.exit(1);
@@ -21,14 +21,14 @@ global.gc && setInterval(global.gc, 3600000);
 const
     Database = require('nedb-promise'),
     MariaDB = require('mariadb'),
-    Discord = require('discord-slim'),
+    { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes } = require('discord-slim'),
     XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
     config = require('./config.json');
 
 const
-    appDb = new Database({ filename: `${storagePath}/app.db`, autoload: true }),
-    usersDb = new Database({ filename: `${storagePath}/users.db`, autoload: true });
+    appDb = Database({ filename: `${storagePath}/app.db`, autoload: true }),
+    usersDb = Database({ filename: `${storagePath}/users.db`, autoload: true });
 
 const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE && process.env.MDB_USER && process.env.MDB_PASSWORD) ? {
     host: process.env.MDB_HOST,
@@ -38,61 +38,40 @@ const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE &
     bigNumberStrings: true,
 } : undefined;
 
-const client = new Discord.Client();
+const authorization = new Authorization(process.env.TOKEN);
 
-client.on('connect', () => console.log('Connection established.'));
-client.on('disconnect', code => console.error(`Disconnect. (${code})`));
-client.on('warn', console.warn);
-client.on('error', console.error);
-client.on('fatal', Shutdown);
+Actions.setDefaultRequestOptions({
+    authorization,
+    rateLimit: {
+        retryCount: 3,
+        callback: (response, attempts) => console.log(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
+    },
+});
+
+const client = new Client();
+
+client.on(ClientEvents.CONNECT, () => console.log('Connection established.'));
+client.on(ClientEvents.DISCONNECT, code => console.error(`Disconnect. (${code})`));
+client.on(ClientEvents.WARN, console.warn);
+client.on(ClientEvents.ERROR, console.error);
+client.on(ClientEvents.FATAL, Shutdown);
 
 const
-    Routes = Discord.Routes,
     ConnectedServers = new Map(),
-    SafePromise = promise => new Promise(resolve => promise.then(result => resolve(result)).catch(error => { console.warn(error); resolve(null); }));
+    SafePromise = (promise) => new Promise((resolve) => promise.then((result) => resolve(result)).catch((error) => { console.warn(error); resolve(null); }));
 
 const
-    AddReaction = (channel, message, emoji) => client.Request('put', Routes.Reaction(channel, message, emoji) + '/@me'),
-    AddRole = (server, user, role) => client.Request('put', Routes.Role(server, user, role)),
-    BanUser = (server, user, reason) => client.Request('put', `${Routes.Server(server)}/bans/${user.id || user}?reason=${encodeURI(reason)}`),
-    GetBan = (server, user) => client.Request('get', `${Routes.Server(server)}/bans/${user.id || user}`),
-    GetBans = server => client.Request('get', Routes.Server(server) + '/bans'),
-    GetMessage = (channel, message) => client.Request('get', Routes.Message(channel, message)),
-    GetUserChannel = user => client.Request('post', Routes.User('@me') + '/channels', { recipient_id: user.id || user }),
-    RemoveRole = (server, user, role) => client.Request('delete', Routes.Role(server, user, role)),
-    SendMessage = (channel, content, embed) => client.Request('post', Routes.Channel(channel) + '/messages', { content, embed }),
-    UnbanUser = (server, user) => client.Request('delete', `${Routes.Server(server)}/bans/${user.id || user}`);
+    SendMessage = (channel_id, content, embed) => Actions.Message.Create(channel_id, { content, embed }),
+    ChannelMention = (channel_id) => `<#${channel_id}>`,
+    HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
+    InProject = (status) => (status == 'leader') || (status == 'moderator') || (status == 'active'),
+    UserMention = (user_id) => `<@${user_id}>`,
+    XgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`;
 
-const
-    ChannelMention = channel => `<#${channel.id || channel}>`,
-    HasRole = (member, role) => member.roles.indexOf(role.id || role) > -1,
-    InProject = status => (status == 'leader') || (status == 'moderator') || (status == 'active'),
-    UserMention = user => `<@${user.id || user}>`,
-    XgmUserLink = xgmid => `https://xgm.guru/user/${xgmid}`;
-
-const SendPM = async (user, msg) => await SafePromise(SendMessage(await GetUserChannel(user), msg));
-
-const botCommands = {
-    help: async message => {
-        SendMessage(message.channel_id, `**Справка**
-
-\`who @user\` - получить информацию о привязке указанного пользователя.
-\`help\` - показать данное сообщение.
-
-*Команды можно отправлять боту в ЛС.*
-*Для упоминания любого пользователя в дискорде можно использовать его ID в виде \`<@ID>\`.*`);
-    },
-
-    who: async message => {
-        if(!(message.mentions && message.mentions.length))
-            return;
-
-        const userData = await usersDb.findOne({ _id: message.mentions[0] });
-        message.reply(userData ? XgmUserLink(userData.xgmid) : 'Пользователь не сопоставлен.');
-    },
+const SendPM = async (user_id, content) => {
+    const channel = await Actions.User.CreateDM({ recipient_id: user_id });
+    return SafePromise(SendMessage(channel.id, content));
 };
-
-botCommands.whois = botCommands.who;
 
 const MarkMessages = (() => {
     const
@@ -116,14 +95,15 @@ const ReactionProc = async (reaction, add) => {
         return;
 
     const mark = msg.marks.find(elem => elem.emoji == reaction.emoji.id);
-    mark && (add ? AddRole : RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
+    mark && (add ? Actions.Member.AddRole : Actions.Member.RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
 };
 
-const SetMarks = async serverEmojis => {
-    if(MarkMessages.synced)
+let marksSynced = false;
+const SetMarks = async (serverEmojis) => {
+    if(marksSynced)
         return;
 
-    MarkMessages.synced = true;
+    marksSynced = true;
 
     const emojiMap = new Map();
     for(let i = 0; i < serverEmojis.length; i++) {
@@ -132,7 +112,7 @@ const SetMarks = async serverEmojis => {
     }
 
     for(const msg of MarkMessages.values()) {
-        const message = await GetMessage(msg.channel, msg.id);
+        const message = await Actions.Message.Get(msg.channel, msg.id);
         if(!message)
             continue;
 
@@ -142,7 +122,7 @@ const SetMarks = async serverEmojis => {
                 continue;
 
             const emoji = emojiMap.get(mark.emoji);
-            await AddReaction(message.channel_id, message.id, `${emoji.name}:${emoji.id}`);
+            await Actions.Reaction.Add(message.channel_id, message.id, `${emoji.name}:${emoji.id}`);
         }
     }
 };
@@ -203,10 +183,10 @@ setInterval(CheckNews, 600000);
 const RoleSwitch = async (member, role, enable) => {
     if(enable) {
         if(!HasRole(member, role))
-            await AddRole(config.server, member.user, role);
+            await Actions.Member.AddRole(config.server, member.user.id, role);
     } else {
         if(HasRole(member, role))
-            await RemoveRole(config.server, member.user, role);
+            await Actions.Member.RemoveRole(config.server, member.user.id, role);
     }
 };
 
@@ -224,13 +204,13 @@ const SyncUser = async (userid, xgmid, banned) => {
 
     if(status == 'suspended') {
         if(member || !banned)
-            await BanUser(config.server, userid, 'Бан на сайте');
+            await Actions.Ban.Add(config.server, userid, { reason: 'Бан на сайте' });
         return;
     }
 
     if(!member) {
         if(banned)
-            await UnbanUser(config.server, userid);
+            await Actions.Ban.Remove(config.server, userid);
         return;
     }
 
@@ -243,7 +223,7 @@ const SyncUser = async (userid, xgmid, banned) => {
 
 const SyncUsers = async () => {
     const
-        bans = await GetBans(config.server),
+        bans = await Actions.Guild.GetBans(config.server),
         banned = new Set();
 
     for(const banInfo of bans)
@@ -288,7 +268,7 @@ const CheckBan = async (data, flag) => {
     SyncUser(data.user.id, userInfo._id, flag);
 };
 
-const SaveMessage = async message => {
+const SaveMessage = async (message) => {
     if(!mdbConnectionOptions)
         return;
 
@@ -308,7 +288,7 @@ const SaveMessage = async message => {
     }
 };
 
-const LoadMessage = async message => {
+const LoadMessage = async (message) => {
     if(!mdbConnectionOptions)
         return;
 
@@ -329,7 +309,7 @@ const LoadMessage = async message => {
         return results[0];
 };
 
-const GenRolesMap = roles => {
+const GenRolesMap = (roles) => {
     const map = new Map();
     for(let i = 0; i < roles.length; i++) {
         const role = roles[i];
@@ -338,7 +318,7 @@ const GenRolesMap = roles => {
     return map;
 };
 
-const AddServer = server => {
+const AddServer = (server) => {
     ConnectedServers.set(server.id, {
         id: server.id,
         roles: GenRolesMap(server.roles),
@@ -352,264 +332,253 @@ const UpdateServer = (server, update) => {
 
 let firstUsersSync = true;
 
-const events = {
-    READY: async data => {
-        client.user = data.user;
-        client.WsSend({ op: 3, d: { status: { web: 'online' }, game: { name: '/help', type: 3 }, afk: false, since: 0 } });
+client.events.on(Events.READY, async (data) => {
+    ConnectedServers.clear();
 
-        ConnectedServers.clear();
+    for(const server of data.guilds)
+        ConnectedServers.set(server.id, server);
 
-        const servers = data.guilds;
-        for(let i = 0; i < servers.length; i++) {
-            const server = servers[i];
-            ConnectedServers.set(server.id, server);
-        }
-
-        console.log('READY');
-    },
-
-    MESSAGE_CREATE: async message => {
-        if(message.guild_id && (message.guild_id != config.server))
-            return;
-
-        if(!message.content)
-            return;
-
-        if(message.author.id == client.user.id)
-            return;
-
-        message.guild_id && SaveMessage(message);
-
-        if(!message.content.startsWith(config.prefix))
-            return;
-
-        const
-            si = message.content.search(/(\s|\n|$)/),
-            command = message.content.substring(config.prefix.length, (si > 0) ? si : undefined).toLowerCase();
-
-        if(!(command && botCommands.hasOwnProperty(command)))
-            return;
-
-        message.content = message.content.substring((si > 0) ? (si + 1) : '');
-        message.mentions = Misc.GetMentions(message.content);
-        message.reply = content => SendMessage(message.channel_id, message.guild_id ? `${UserMention(message.author)}\n${content}` : content);
-
-        message.server = message.guild_id ? ConnectedServers.get(message.guild_id) : ConnectedServers.get(config.server);
-
-        if(!message.member)
-            message.member = message.server.members.get(message.author.id);
-
-        console.log(`COMMAND (${command}) ARG (${message.content}) USER (${message.author.username}#${message.author.discriminator}) ${message.guild_id ? 'SERVER' : 'PM'}`);
-        botCommands[command](message);
-    },
-
-    MESSAGE_UPDATE: async message => {
-        if(message.guild_id != config.server)
-            return;
-
-        if(!message.author)
-            return;
-
-        if(message.author.id == client.user.id)
-            return;
-
-        const result = await LoadMessage(message);
-
-        SaveMessage(message);
-
-        if(!result)
-            return;
-
-        SendMessage(config.channel.deleted, '', {
-            title: 'Сообщение изменено',
-            fields: [
-                {
-                    name: 'Автор',
-                    value: UserMention(result.user),
-                    inline: true,
-                },
-                {
-                    name: 'Канал',
-                    value: ChannelMention(message.channel_id),
-                    inline: true,
-                },
-                {
-                    name: 'Содержимое',
-                    value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
-                },
-                {
-                    name: 'Переход',
-                    value: `${Discord.Host}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
-                },
-            ],
-            timestamp: new Date(result.dt),
-        });
-    },
-
-    MESSAGE_DELETE: async message => {
-        if(message.guild_id != config.server)
-            return;
-
-        const result = await LoadMessage(message);
-        if(!result)
-            return;
-
-        SendMessage(config.channel.deleted, '', {
-            title: 'Сообщение удалено',
-            fields: [
-                {
-                    name: 'Автор',
-                    value: UserMention(result.user),
-                    inline: true,
-                },
-                {
-                    name: 'Канал',
-                    value: ChannelMention(message.channel_id),
-                    inline: true,
-                },
-                {
-                    name: 'Содержимое',
-                    value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
-                },
-            ],
-            timestamp: new Date(result.dt),
-        });
-    },
-
-    GUILD_MEMBER_ADD: async member => {
-        const server = ConnectedServers.get(member.guild_id);
-        server && server.members.set(member.user.id, member);
-
-        if(member.guild_id != config.server)
-            return;
-
-        SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user)} присоединился к серверу.`);
-
-        const userInfo = await usersDb.findOne({ _id: member.user.id });
-        userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
-    },
-
-    GUILD_MEMBER_UPDATE: async member => {
-        const server = ConnectedServers.get(member.guild_id);
-        server && server.members.set(member.user.id, member);
-    },
-
-    GUILD_MEMBER_REMOVE: async member => {
-        const server = ConnectedServers.get(member.guild_id);
-        server && server.members.delete(member.user.id);
-
-        if(member.guild_id == config.server)
-            SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user)} покинул сервер.`);
-    },
-
-    MESSAGE_REACTION_ADD: async reaction => {
-        if(reaction.guild_id != config.server)
-            return;
-
-        if(client.user.id != reaction.user_id)
-            ReactionProc(reaction, true);
-    },
-
-    MESSAGE_REACTION_REMOVE: async reaction => {
-        if(reaction.guild_id != config.server)
-            return;
-
-        if(client.user.id != reaction.user_id)
-            ReactionProc(reaction, false);
-    },
-
-    GUILD_CREATE: async server => {
-        AddServer(server);
-        client.WsSend({ op: 8, d: { guild_id: server.id, query: '', limit: 0 } });
-
-        if(server.id != config.server)
-            return;
-
-        SetMarks(server.emojis);
-        CheckNews();
-    },
-
-    GUILD_UPDATE: async update => {
-        const server = ConnectedServers.get(update.id);
-        server && UpdateServer(server, update);
-    },
-
-    GUILD_DELETE: async deleted => {
-        !deleted.unavailable && ConnectedServers.delete(deleted.id);
-    },
-
-    GUILD_MEMBERS_CHUNK: async chunk => {
-        const server = ConnectedServers.get(chunk.guild_id);
-        if(!server)
-            return;
-
-        const
-            map = server.members,
-            members = chunk.members;
-
-        for(let i = 0; i < members.length; i++) {
-            const member = members[i];
-            map.set(member.user.id, member);
-        }
-
-        if(firstUsersSync && (server.id == config.server) && (chunk.chunk_index >= chunk.chunk_count - 1)) {
-            firstUsersSync = false;
-            SyncUsers();
-        }
-    },
-
-    GUILD_ROLE_CREATE: async data => {
-        const server = ConnectedServers.get(data.guild_id);
-        server && server.roles.set(data.role.id, data.role);
-    },
-
-    GUILD_ROLE_UPDATE: async data => {
-        const server = ConnectedServers.get(data.guild_id);
-        server && server.roles.set(data.role.id, data.role);
-    },
-
-    GUILD_ROLE_DELETE: async data => {
-        const server = ConnectedServers.get(data.guild_id);
-        server && server.roles.delete(data.role_id);
-    },
-
-    GUILD_BAN_ADD: data => CheckBan(data, true),
-
-    GUILD_BAN_REMOVE: data => CheckBan(data, false),
-};
-
-client.on('packet', async packet => {
-    const event = events[packet.t];
-    event && event(packet.d);
+    console.log('READY');
 });
 
-client.Auth(process.env.TOKEN);
-client.Connect(0
-    | Discord.Intents.GUILDS
-    | Discord.Intents.GUILD_MEMBERS
-    | Discord.Intents.GUILD_BANS
-    | Discord.Intents.GUILD_MESSAGES
-    | Discord.Intents.GUILD_MESSAGE_REACTIONS
-    | Discord.Intents.DIRECT_MESSAGES
-);
+client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
+    const data = interaction.data, user = interaction.member?.user;
+    if(!(data && user)) return;
 
-if(!(process.env.AUTH_SVC && process.env.CLIENT_ID && process.env.CLIENT_SECRET && process.env.REDIRECT_URL))
-    return;
+    console.log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
+
+    if(data.name != 'who') return;
+
+    const options = data.options;
+    if(!options) return;
+
+    const _id = options[0]?.value?.toString?.();
+    if(!_id) return;
+
+    const userData = await usersDb.findOne({ _id });
+    Actions.Application.CreateInteractionResponse(interaction.id, interaction.token, {
+        type: Helpers.InteractionResponseTypes.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+            content: userData ? XgmUserLink(userData.xgmid) : 'Пользователь не сопоставлен.',
+            flags: options[1]?.value ? undefined : Helpers.InteractionResponseFlags.EPHEMERAL,
+        },
+    });
+});
+
+client.events.on(Events.MESSAGE_CREATE, async (message) => {
+    if(message.author.id == client.user.id) return;
+    SaveMessage(message);
+});
+
+client.events.on(Events.MESSAGE_UPDATE, async (message) => {
+    if(message.guild_id != config.server)
+        return;
+
+    if(!message.author)
+        return;
+
+    if(message.author.id == client.user.id)
+        return;
+
+    const result = await LoadMessage(message);
+
+    SaveMessage(message);
+
+    if(!result)
+        return;
+
+    SendMessage(config.channel.deleted, '', {
+        title: 'Сообщение изменено',
+        fields: [
+            {
+                name: 'Автор',
+                value: UserMention(result.user),
+                inline: true,
+            },
+            {
+                name: 'Канал',
+                value: ChannelMention(message.channel_id),
+                inline: true,
+            },
+            {
+                name: 'Содержимое',
+                value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
+            },
+            {
+                name: 'Переход',
+                value: `${Helpers.HOST}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
+            },
+        ],
+        timestamp: new Date(result.dt),
+    });
+});
+
+client.events.on(Events.MESSAGE_DELETE, async (message) => {
+    if(message.guild_id != config.server)
+        return;
+
+    const result = await LoadMessage(message);
+    if(!result)
+        return;
+
+    SendMessage(config.channel.deleted, '', {
+        title: 'Сообщение удалено',
+        fields: [
+            {
+                name: 'Автор',
+                value: UserMention(result.user),
+                inline: true,
+            },
+            {
+                name: 'Канал',
+                value: ChannelMention(message.channel_id),
+                inline: true,
+            },
+            {
+                name: 'Содержимое',
+                value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
+            },
+        ],
+        timestamp: new Date(result.dt),
+    });
+});
+
+client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
+    const server = ConnectedServers.get(member.guild_id);
+    server && server.members.set(member.user.id, member);
+
+    if(member.guild_id != config.server)
+        return;
+
+    SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user.id)} присоединился к серверу.`);
+
+    const userInfo = await usersDb.findOne({ _id: member.user.id });
+    userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
+});
+
+client.events.on(Events.GUILD_MEMBER_UPDATE, async (member) => {
+    const server = ConnectedServers.get(member.guild_id);
+    server && server.members.set(member.user.id, member);
+});
+
+client.events.on(Events.GUILD_MEMBER_REMOVE, async (member) => {
+    const server = ConnectedServers.get(member.guild_id);
+    server && server.members.delete(member.user.id);
+
+    if(member.guild_id == config.server)
+        SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user.id)} покинул сервер.`);
+});
+
+client.events.on(Events.MESSAGE_REACTION_ADD, async (reaction) => {
+    if(reaction.guild_id != config.server)
+        return;
+
+    if(client.user.id != reaction.user_id)
+        ReactionProc(reaction, true);
+});
+
+client.events.on(Events.MESSAGE_REACTION_REMOVE, async (reaction) => {
+    if(reaction.guild_id != config.server)
+        return;
+
+    if(client.user.id != reaction.user_id)
+        ReactionProc(reaction, false);
+});
+
+client.events.on(Events.GUILD_CREATE, async (server) => {
+    AddServer(server);
+    client.RequestGuildMembers({
+        guild_id: server.id,
+        query: '',
+        limit: 0,
+    });
+
+    if(server.id != config.server)
+        return;
+
+    SetMarks(server.emojis);
+    CheckNews();
+});
+
+client.events.on(Events.GUILD_UPDATE, async (update) => {
+    const server = ConnectedServers.get(update.id);
+    server && UpdateServer(server, update);
+});
+
+client.events.on(Events.GUILD_DELETE, async (deleted) => {
+    !deleted.unavailable && ConnectedServers.delete(deleted.id);
+});
+
+client.events.on(Events.GUILD_MEMBERS_CHUNK, async (chunk) => {
+    const server = ConnectedServers.get(chunk.guild_id);
+    if(!server)
+        return;
+
+    const
+        map = server.members,
+        members = chunk.members;
+
+    for(let i = 0; i < members.length; i++) {
+        const member = members[i];
+        map.set(member.user.id, member);
+    }
+
+    if(firstUsersSync && (server.id == config.server) && (chunk.chunk_index >= chunk.chunk_count - 1)) {
+        firstUsersSync = false;
+        SyncUsers();
+    }
+});
+
+client.events.on(Events.GUILD_ROLE_CREATE, async (data) => {
+    const server = ConnectedServers.get(data.guild_id);
+    server && server.roles.set(data.role.id, data.role);
+});
+
+client.events.on(Events.GUILD_ROLE_UPDATE, async (data) => {
+    const server = ConnectedServers.get(data.guild_id);
+    server && server.roles.set(data.role.id, data.role);
+});
+
+client.events.on(Events.GUILD_ROLE_DELETE, async (data) => {
+    const server = ConnectedServers.get(data.guild_id);
+    server && server.roles.delete(data.role_id);
+});
+
+client.events.on(Events.GUILD_BAN_ADD, (data) => CheckBan(data, true));
+
+client.events.on(Events.GUILD_BAN_REMOVE, (data) => CheckBan(data, false));
+
+client.Connect(authorization, 0
+    | Helpers.Intents.GUILDS
+    | Helpers.Intents.GUILD_MEMBERS
+    | Helpers.Intents.GUILD_BANS
+    | Helpers.Intents.GUILD_MESSAGES
+    | Helpers.Intents.GUILD_MESSAGE_REACTIONS
+    | Helpers.Intents.DIRECT_MESSAGES
+);
 
 const
     AUTH_SVC = process.env.AUTH_SVC,
-    CLIENT_ID = encodeURIComponent(process.env.CLIENT_ID),
-    CLIENT_SECRET = encodeURIComponent(process.env.CLIENT_SECRET),
-    REDIRECT_URL = encodeURIComponent(process.env.REDIRECT_URL);
+    CLIENT_ID = process.env.CLIENT_ID,
+    CLIENT_SECRET = process.env.CLIENT_SECRET,
+    REDIRECT_URL = process.env.REDIRECT_URL;
 
 const VerifyUser = async (code, xgmid) => {
-    const res = await SafePromise(client.Request('post', '/oauth2/token', `client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${REDIRECT_URL}&scope=identify`));
+    const res = await SafePromise(Actions.OAuth2.TokenExchange({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: Helpers.OAuth2GrantTypes.AUTHORIZATION_CODE,
+        redirect_uri: REDIRECT_URL,
+        scope: Helpers.OAuth2Scopes.IDENTIFY,
+        code,
+    }));
+
     if(!(res && res.access_token)) {
         console.warn('Verify: token request failed.');
         return 400;
     }
 
-    const user = await SafePromise(client.Request('get', Routes.User('@me'), null, `Bearer ${res.access_token}`));
+    const user = await SafePromise(Actions.User.Get('@me', { authorization: new Authorization(res.access_token, TokenTypes.BEARER) }));
     if(!(user && user.id)) {
         console.warn('Verify: user request failed.');
         return 500;
@@ -622,13 +591,13 @@ const VerifyUser = async (code, xgmid) => {
     const userInfo = await usersDb.findOne({ _id: user.id });
     if(userInfo) {
         if(userInfo.xgmid == xgmid) {
-            SendPM(user, 'Аккаунт уже подтвержден.');
+            SendPM(user.id, 'Аккаунт уже подтвержден.');
             retCode = 208;
         } else {
             await usersDb.update({ _id: user.id }, { xgmid });
             usersDb.nedb.persistence.compactDatafile();
-            SendMessage(config.channel.log, `Перепривязка аккаунта XGM ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
-            SendPM(user, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
+            SendMessage(config.channel.log, `Перепривязка аккаунта XGM ${UserMention(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
+            SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
             retCode = 200;
         }
     } else {
@@ -638,8 +607,8 @@ const VerifyUser = async (code, xgmid) => {
             await usersDb.remove({ xgmid });
             const member = ConnectedServers.get(config.server).members.get(clone._id);
             if(member) {
-                RemoveRole(config.server, member.user, config.role.user);
-                RemoveRole(config.server, member.user, config.role.twilight);
+                Actions.Member.RemoveRole(config.server, member.user.id, config.role.user);
+                Actions.Member.RemoveRole(config.server, member.user.id, config.role.twilight);
             }
         }
 
@@ -648,10 +617,10 @@ const VerifyUser = async (code, xgmid) => {
         usersDb.nedb.persistence.compactDatafile();
 
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта Discord ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
-            `Привязка аккаунта ${UserMention(user)} :white_check_mark: ${XgmUserLink(xgmid)}`
+            `Перепривязка аккаунта Discord ${UserMention(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
+            `Привязка аккаунта ${UserMention(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}`
         );
-        SendPM(user, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
+        SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
 
         retCode = 200;
     }
@@ -702,7 +671,7 @@ const webApiFuncs = {
         SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
-            RemoveRole(config.server, userInfo._id, config.role.user);
+            Actions.Member.RemoveRole(config.server, userInfo._id, config.role.user);
 
         SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален.');
 
@@ -725,7 +694,7 @@ const webApiFuncs = {
             return response.statusCode = 418;
 
         (async () => {
-            SyncUser(userInfo._id, xgmid, await SafePromise(GetBan(config.server, userInfo._id)));
+            SyncUser(userInfo._id, xgmid, await SafePromise(Actions.Ban.Get(config.server, userInfo._id)));
         })();
 
         response.statusCode = 200;
@@ -816,7 +785,7 @@ const HandleRequest = async (request, response) => {
     await webApiFuncs[request.url](request, response);
 };
 
-require('http').createServer(async (request, response) => {
+AUTH_SVC && CLIENT_ID && CLIENT_SECRET && REDIRECT_URL && require('http').createServer(async (request, response) => {
     try {
         await HandleRequest(request, response);
     } catch(e) {

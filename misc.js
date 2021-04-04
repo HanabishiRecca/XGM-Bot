@@ -3,7 +3,7 @@
 const htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' };
 exports.DecodeHtmlEntity = str => str.replace(/&amp;/g, '&').replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
 
-const ReadIncomingData = incoming => new Promise((resolve, reject) => {
+const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
     const chunks = [];
     let dataLen = 0;
 
@@ -22,16 +22,7 @@ const ReadIncomingData = incoming => new Promise((resolve, reject) => {
         if(chunks.length == 1)
             return resolve(chunks[0]);
 
-        const data = Buffer.allocUnsafe(dataLen);
-        let len = 0;
-
-        for(let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            chunk.copy(data, len);
-            len += chunk.length;
-        }
-
-        resolve(data);
+        resolve(Buffer.concat(chunks, dataLen));
     });
 });
 
@@ -46,16 +37,3 @@ exports.HttpsGet = url => new Promise((resolve, reject) => {
         ReadIncomingData(response).then(resolve).catch(reject);
     });
 });
-
-exports.GetMentions = str => {
-    const
-        result = [],
-        regExp = /<@!?([0-9]+)>/g;
-
-    let match;
-    while(match = regExp.exec(str))
-        if(match.length > 1)
-            result.push(match[1]);
-
-    return result;
-};
