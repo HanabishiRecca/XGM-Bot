@@ -21,7 +21,7 @@ global.gc && setInterval(global.gc, 3600000);
 const
     Database = require('nedb-promise'),
     MariaDB = require('mariadb'),
-    { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes } = require('discord-slim'),
+    { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes, Tools } = require('discord-slim'),
     XmlParser = require('fast-xml-parser'),
     Misc = require('./misc.js'),
     config = require('./config.json');
@@ -62,10 +62,8 @@ const
 
 const
     SendMessage = (channel_id, content, embed) => Actions.Message.Create(channel_id, { content, embed }),
-    ChannelMention = (channel_id) => `<#${channel_id}>`,
     HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
-    InProject = (status) => (status == 'leader') || (status == 'moderator') || (status == 'active'),
-    UserMention = (user_id) => `<@${user_id}>`,
+    InProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active')),
     XgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`;
 
 const SendPM = async (user_id, content) => {
@@ -78,49 +76,36 @@ const MarkMessages = (() => {
         list = require('./marks.js').list,
         msgs = new Map();
 
-    for(let i = 0; i < list.length; i++) {
-        const mark = list[i];
-        if(msgs.has(mark.message))
-            msgs.get(mark.message).marks.push(mark);
-        else
+    for(const mark of list)
+        msgs.has(mark.message) ?
+            msgs.get(mark.message).marks.push(mark) :
             msgs.set(mark.message, { id: mark.message, channel: mark.channel, marks: [mark] });
-    }
 
     return msgs;
 })();
 
 const ReactionProc = async (reaction, add) => {
     const msg = MarkMessages.get(reaction.message_id);
-    if(!msg)
-        return;
-
-    const mark = msg.marks.find(elem => elem.emoji == reaction.emoji.id);
-    mark && (add ? Actions.Member.AddRole : Actions.Member.RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
+    if(!msg) return;
+    const mark = msg.marks.find((elem) => elem.emoji == reaction.emoji.id);
+    if(!mark) return;
+    (add ? Actions.Member.AddRole : Actions.Member.RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
 };
 
 let marksSynced = false;
 const SetMarks = async (serverEmojis) => {
-    if(marksSynced)
-        return;
-
+    if(marksSynced) return;
     marksSynced = true;
 
     const emojiMap = new Map();
-    for(let i = 0; i < serverEmojis.length; i++) {
-        const emoji = serverEmojis[i];
+    for(const emoji of serverEmojis)
         emojiMap.set(emoji.id, emoji);
-    }
 
     for(const msg of MarkMessages.values()) {
         const message = await Actions.Message.Get(msg.channel, msg.id);
-        if(!message)
-            continue;
-
-        for(let i = 0; i < msg.marks.length; i++) {
-            const mark = msg.marks[i];
-            if(message.reactions.find(elem => elem.emoji.id == mark.emoji))
-                continue;
-
+        if(!message) continue;
+        for(const mark of msg.marks) {
+            if(message.reactions.find((elem) => elem.emoji.id == mark.emoji)) continue;
             const emoji = emojiMap.get(mark.emoji);
             await Actions.Reaction.Add(message.channel_id, message.id, `${emoji.name}:${emoji.id}`);
         }
@@ -133,12 +118,10 @@ const appOptions = {
 
 const CheckNews = async () => {
     const data = await Misc.HttpsGet('https://xgm.guru/rss');
-    if(!(data && data.length))
-        return;
+    if(!data?.length) return;
 
     const feed = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' });
-    if(!(feed.rss && feed.rss.channel && feed.rss.channel.item))
-        return;
+    if(!feed?.rss?.channel?.item) return;
 
     const
         option = await appDb.findOne(appOptions.lastNewsTime),
@@ -191,15 +174,13 @@ const RoleSwitch = async (member, role, enable) => {
 };
 
 const SyncUser = async (userid, xgmid, banned) => {
-    if(userid == client.user.id)
-        return;
+    if(userid == client.user.id) return;
 
     const response = JSON.parse(await SafePromise(Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`)));
-    if(!response)
-        return;
+    if(!response) return;
 
     const
-        status = response.state.access.staff_status,
+        status = response.state?.access?.staff_status,
         member = ConnectedServers.get(config.server).members.get(userid);
 
     if(status == 'suspended') {
@@ -217,8 +198,8 @@ const SyncUser = async (userid, xgmid, banned) => {
     await RoleSwitch(member, config.role.readonly, status == 'readonly');
     await RoleSwitch(member, config.role.user, true);
     await RoleSwitch(member, config.role.staff, InProject(status));
-    await RoleSwitch(member, config.role.team, response.state.projects['833'] && InProject(response.state.projects['833'].status));
-    await RoleSwitch(member, config.role.twilight, response.info.user.seeTwilight);
+    await RoleSwitch(member, config.role.team, InProject(response.state?.projects?.['833']?.status));
+    await RoleSwitch(member, config.role.twilight, response.info?.user?.seeTwilight);
 };
 
 const SyncUsers = async () => {
@@ -241,8 +222,11 @@ const SyncUsers = async () => {
     for(const userInfo of users)
         xgms.add(userInfo._id);
 
+    const members = ConnectedServers.get(config.server)?.members;
+    if(!members) return;
+
     try {
-        for(const member of ConnectedServers.get(config.server).members.values())
+        for(const member of members.values())
             if(member && !xgms.has(member.user.id)) {
                 await RoleSwitch(member, config.role.readonly, false);
                 await RoleSwitch(member, config.role.user, false);
@@ -258,22 +242,17 @@ const SyncUsers = async () => {
 setInterval(SyncUsers, 3600000);
 
 const CheckBan = async (data, flag) => {
-    if(!((data.guild_id == config.server) && data.user))
-        return;
+    if(!((data.guild_id == config.server) && data.user)) return;
 
     const userInfo = await usersDb.findOne({ _id: data.user.id });
-    if(!userInfo)
-        return;
+    if(!userInfo) return;
 
     SyncUser(data.user.id, userInfo._id, flag);
 };
 
 const SaveMessage = async (message) => {
-    if(!mdbConnectionOptions)
-        return;
-
-    if(!(message.content && message.guild_id))
-        return;
+    if(!mdbConnectionOptions) return;
+    if(!(message.content && message.guild_id)) return;
 
     try {
         const connection = await MariaDB.createConnection(mdbConnectionOptions);
@@ -289,8 +268,7 @@ const SaveMessage = async (message) => {
 };
 
 const LoadMessage = async (message) => {
-    if(!mdbConnectionOptions)
-        return;
+    if(!mdbConnectionOptions) return;
 
     let results;
     try {
@@ -305,32 +283,23 @@ const LoadMessage = async (message) => {
         console.error(err);
     }
 
-    if(results && results.length)
-        return results[0];
+    return results?.[0];
 };
 
 const GenRolesMap = (roles) => {
     const map = new Map();
-    for(let i = 0; i < roles.length; i++) {
-        const role = roles[i];
+    for(const role of roles)
         map.set(role.id, role);
-    }
     return map;
 };
 
-const AddServer = (server) => {
+const AddServer = (server) =>
     ConnectedServers.set(server.id, {
         id: server.id,
         roles: GenRolesMap(server.roles),
         members: new Map(),
     });
-};
 
-const UpdateServer = (server, update) => {
-    server.roles = GenRolesMap(update.roles);
-};
-
-let firstUsersSync = true;
 
 client.events.on(Events.READY, async (data) => {
     ConnectedServers.clear();
@@ -371,33 +340,24 @@ client.events.on(Events.MESSAGE_CREATE, async (message) => {
 });
 
 client.events.on(Events.MESSAGE_UPDATE, async (message) => {
-    if(message.guild_id != config.server)
-        return;
-
-    if(!message.author)
-        return;
-
-    if(message.author.id == client.user.id)
-        return;
+    if(!message.author || (message.guild_id != config.server) || (message.author.id == client.user.id)) return;
 
     const result = await LoadMessage(message);
-
     SaveMessage(message);
 
-    if(!result)
-        return;
+    if(!result) return;
 
     SendMessage(config.channel.deleted, '', {
         title: 'Сообщение изменено',
         fields: [
             {
                 name: 'Автор',
-                value: UserMention(result.user),
+                value: Tools.Mentions.User(result.user),
                 inline: true,
             },
             {
                 name: 'Канал',
-                value: ChannelMention(message.channel_id),
+                value: Tools.Mentions.Channel(message.channel_id),
                 inline: true,
             },
             {
@@ -414,24 +374,22 @@ client.events.on(Events.MESSAGE_UPDATE, async (message) => {
 });
 
 client.events.on(Events.MESSAGE_DELETE, async (message) => {
-    if(message.guild_id != config.server)
-        return;
+    if(message.guild_id != config.server) return;
 
     const result = await LoadMessage(message);
-    if(!result)
-        return;
+    if(!result) return;
 
     SendMessage(config.channel.deleted, '', {
         title: 'Сообщение удалено',
         fields: [
             {
                 name: 'Автор',
-                value: UserMention(result.user),
+                value: Tools.Mentions.User(result.user),
                 inline: true,
             },
             {
                 name: 'Канал',
-                value: ChannelMention(message.channel_id),
+                value: Tools.Mentions.Channel(message.channel_id),
                 inline: true,
             },
             {
@@ -444,57 +402,48 @@ client.events.on(Events.MESSAGE_DELETE, async (message) => {
 });
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
-    const server = ConnectedServers.get(member.guild_id);
-    server && server.members.set(member.user.id, member);
+    ConnectedServers.get(member.guild_id)?.members.set(member.user.id, member);
 
-    if(member.guild_id != config.server)
-        return;
+    if(member.guild_id != config.server) return;
 
-    SendMessage(config.channel.log, `<:zplus:544205514943365123> ${UserMention(member.user.id)} присоединился к серверу.`);
+    SendMessage(config.channel.log, `<:zplus:544205514943365123> ${Tools.Mentions.User(member.user.id)} присоединился к серверу.`);
 
     const userInfo = await usersDb.findOne({ _id: member.user.id });
     userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
 });
 
 client.events.on(Events.GUILD_MEMBER_UPDATE, async (member) => {
-    const server = ConnectedServers.get(member.guild_id);
-    server && server.members.set(member.user.id, member);
+    ConnectedServers.get(member.guild_id)?.members.set(member.user.id, member);
 });
 
 client.events.on(Events.GUILD_MEMBER_REMOVE, async (member) => {
-    const server = ConnectedServers.get(member.guild_id);
-    server && server.members.delete(member.user.id);
+    ConnectedServers.get(member.guild_id)?.members.delete(member.user.id);
 
-    if(member.guild_id == config.server)
-        SendMessage(config.channel.log, `<:zminus:544205486073839616> ${UserMention(member.user.id)} покинул сервер.`);
+    if(member.guild_id != config.server) return;
+
+    SendMessage(config.channel.log, `<:zminus:544205486073839616> ${Tools.Mentions.User(member.user.id)} покинул сервер.`);
 });
 
 client.events.on(Events.MESSAGE_REACTION_ADD, async (reaction) => {
-    if(reaction.guild_id != config.server)
-        return;
-
-    if(client.user.id != reaction.user_id)
-        ReactionProc(reaction, true);
+    if((reaction.guild_id != config.server) || (client.user.id == reaction.user_id)) return;
+    ReactionProc(reaction, true);
 });
 
 client.events.on(Events.MESSAGE_REACTION_REMOVE, async (reaction) => {
-    if(reaction.guild_id != config.server)
-        return;
-
-    if(client.user.id != reaction.user_id)
-        ReactionProc(reaction, false);
+    if((reaction.guild_id != config.server) || (client.user.id == reaction.user_id)) return;
+    ReactionProc(reaction, false);
 });
 
 client.events.on(Events.GUILD_CREATE, async (server) => {
     AddServer(server);
+
     client.RequestGuildMembers({
         guild_id: server.id,
         query: '',
         limit: 0,
     });
 
-    if(server.id != config.server)
-        return;
+    if(server.id != config.server) return;
 
     SetMarks(server.emojis);
     CheckNews();
@@ -502,47 +451,35 @@ client.events.on(Events.GUILD_CREATE, async (server) => {
 
 client.events.on(Events.GUILD_UPDATE, async (update) => {
     const server = ConnectedServers.get(update.id);
-    server && UpdateServer(server, update);
+    if(!server) return;
+    server.roles = GenRolesMap(update.roles);
 });
 
-client.events.on(Events.GUILD_DELETE, async (deleted) => {
-    !deleted.unavailable && ConnectedServers.delete(deleted.id);
-});
+client.events.on(Events.GUILD_DELETE, async (deleted) =>
+    !deleted.unavailable && ConnectedServers.delete(deleted.id));
 
+let firstUsersSync = true;
 client.events.on(Events.GUILD_MEMBERS_CHUNK, async (chunk) => {
     const server = ConnectedServers.get(chunk.guild_id);
-    if(!server)
-        return;
+    if(!server) return;
 
-    const
-        map = server.members,
-        members = chunk.members;
+    for(const member of chunk.members)
+        server.members.set(member.user.id, member);
 
-    for(let i = 0; i < members.length; i++) {
-        const member = members[i];
-        map.set(member.user.id, member);
-    }
+    if(!firstUsersSync || (server.id != config.server) || (chunk.chunk_index < chunk.chunk_count - 1)) return;
 
-    if(firstUsersSync && (server.id == config.server) && (chunk.chunk_index >= chunk.chunk_count - 1)) {
-        firstUsersSync = false;
-        SyncUsers();
-    }
+    firstUsersSync = false;
+    SyncUsers();
 });
 
-client.events.on(Events.GUILD_ROLE_CREATE, async (data) => {
-    const server = ConnectedServers.get(data.guild_id);
-    server && server.roles.set(data.role.id, data.role);
-});
+const SetRoleData = async (data) =>
+    ConnectedServers.get(data.guild_id)?.roles.set(data.role.id, data.role);
 
-client.events.on(Events.GUILD_ROLE_UPDATE, async (data) => {
-    const server = ConnectedServers.get(data.guild_id);
-    server && server.roles.set(data.role.id, data.role);
-});
+client.events.on(Events.GUILD_ROLE_CREATE, SetRoleData);
+client.events.on(Events.GUILD_ROLE_UPDATE, SetRoleData);
 
-client.events.on(Events.GUILD_ROLE_DELETE, async (data) => {
-    const server = ConnectedServers.get(data.guild_id);
-    server && server.roles.delete(data.role_id);
-});
+client.events.on(Events.GUILD_ROLE_DELETE, async (data) =>
+    ConnectedServers.get(data.guild_id)?.roles.delete(data.role_id));
 
 client.events.on(Events.GUILD_BAN_ADD, (data) => CheckBan(data, true));
 
@@ -573,19 +510,19 @@ const VerifyUser = async (code, xgmid) => {
         code,
     }));
 
-    if(!(res && res.access_token)) {
+    if(!res?.access_token) {
         console.warn('Verify: token request failed.');
-        return 400;
+        return { code: 400 };
     }
 
     const user = await SafePromise(Actions.User.Get('@me', { authorization: new Authorization(res.access_token, TokenTypes.BEARER) }));
-    if(!(user && user.id)) {
+    if(!user?.id) {
         console.warn('Verify: user request failed.');
-        return 500;
+        return { code: 500 };
     }
 
     if(user.id == client.user.id)
-        return 418;
+        return { code: 418 };
 
     let retCode;
     const userInfo = await usersDb.findOne({ _id: user.id });
@@ -596,7 +533,7 @@ const VerifyUser = async (code, xgmid) => {
         } else {
             await usersDb.update({ _id: user.id }, { xgmid });
             usersDb.nedb.persistence.compactDatafile();
-            SendMessage(config.channel.log, `Перепривязка аккаунта XGM ${UserMention(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
+            SendMessage(config.channel.log, `Перепривязка аккаунта XGM ${Tools.Mentions.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
             SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
             retCode = 200;
         }
@@ -617,8 +554,8 @@ const VerifyUser = async (code, xgmid) => {
         usersDb.nedb.persistence.compactDatafile();
 
         SendMessage(config.channel.log, clone ?
-            `Перепривязка аккаунта Discord ${UserMention(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${UserMention(clone._id)}` :
-            `Привязка аккаунта ${UserMention(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}`
+            `Перепривязка аккаунта Discord ${Tools.Mentions.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mentions.User(clone._id)}` :
+            `Привязка аккаунта ${Tools.Mentions.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}`
         );
         SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
 
@@ -640,15 +577,11 @@ const webApiFuncs = {
             return response.statusCode = 400;
 
         const ret = await VerifyUser(code, xgmid);
-        if(ret.code) {
-            response.statusCode = ret.code;
-            if(ret.content) {
-                response.setHeader('Content-Length', Buffer.byteLength(ret.content));
-                response.write(ret.content);
-            }
-        } else {
-            response.statusCode = ret;
-        }
+        response.statusCode = ret.code;
+
+        if(!ret.content) return;
+        response.setHeader('Content-Length', Buffer.byteLength(ret.content));
+        response.write(ret.content);
     },
 
     '/delete': async (request, response) => {
@@ -668,7 +601,7 @@ const webApiFuncs = {
         console.log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
         usersDb.nedb.persistence.compactDatafile();
-        SendMessage(config.channel.log, `Отвязка аккаунта ${UserMention(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
+        SendMessage(config.channel.log, `Отвязка аккаунта ${Tools.Mentions.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             Actions.Member.RemoveRole(config.server, userInfo._id, config.role.user);
@@ -778,7 +711,7 @@ const HandleRequest = async (request, response) => {
     if(request.headers.authorization != AUTH_SVC)
         return response.statusCode = 401;
 
-    if(!(request.url && webApiFuncs.hasOwnProperty(request.url)))
+    if(!webApiFuncs.hasOwnProperty(request.url))
         return response.statusCode = 404;
 
     console.log(`POST '${request.url}'`);
