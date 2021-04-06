@@ -2,11 +2,6 @@
 
 const CurrentDT = () => `[${new Date().toLocaleString('ru')}]`;
 
-const ConsoleLog = console.log;
-console.log = (...params) => ConsoleLog('\x1b[0m', CurrentDT(), ...params);
-
-const ConsoleWarn = console.warn;
-console.warn = (...params) => ConsoleWarn('\x1b[93m', CurrentDT(), ...params);
-
-const ConsoleError = console.error;
-console.error = (...params) => ConsoleError('\x1b[31m', CurrentDT(), ...params);
+exports.Log = (...params) => console.log('\x1b[0m', CurrentDT(), ...params);
+exports.Warn = (...params) => console.warn('\x1b[93m', CurrentDT(), ...params);
+exports.Error = (...params) => console.error('\x1b[31m', CurrentDT(), ...params);

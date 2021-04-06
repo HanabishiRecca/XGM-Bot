@@ -1,10 +1,10 @@
 'use strict';
 
-require('./log.js');
+const Logger = require('./log.js');
 
 const Shutdown = (err) => {
-    console.error(err);
-    console.log('SHUTDOWN');
+    Logger.Error(err);
+    Logger.Log('SHUTDOWN');
     process.exit(1);
 };
 
@@ -44,21 +44,21 @@ Actions.setDefaultRequestOptions({
     authorization,
     rateLimit: {
         retryCount: 3,
-        callback: (response, attempts) => console.log(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
+        callback: (response, attempts) => Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
     },
 });
 
 const client = new Client();
 
-client.on(ClientEvents.CONNECT, () => console.log('Connection established.'));
-client.on(ClientEvents.DISCONNECT, code => console.error(`Disconnect. (${code})`));
-client.on(ClientEvents.WARN, console.warn);
-client.on(ClientEvents.ERROR, console.error);
+client.on(ClientEvents.CONNECT, () => Logger.Log('Connection established.'));
+client.on(ClientEvents.DISCONNECT, (code) => Logger.Error(`Disconnect. (${code})`));
+client.on(ClientEvents.WARN, Logger.Warn);
+client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
 const
     ConnectedServers = new Map(),
-    SafePromise = (promise) => new Promise((resolve) => promise.then((result) => resolve(result)).catch((error) => { console.warn(error); resolve(null); }));
+    SafePromise = (promise) => new Promise((resolve) => promise.then((result) => resolve(result)).catch((error) => { Logger.Warn(error); resolve(null); }));
 
 const
     SendMessage = (channel_id, content, embed) => Actions.Message.Create(channel_id, { content, embed }),
@@ -215,7 +215,7 @@ const SyncUsers = async () => {
         for(const userInfo of users)
             await SyncUser(userInfo._id, userInfo.xgmid, banned.has(userInfo._id));
     } catch(e) {
-        console.error(e);
+        Logger.Error(e);
     }
 
     const xgms = new Set();
@@ -235,7 +235,7 @@ const SyncUsers = async () => {
                 await RoleSwitch(member, config.role.twilight, false);
             }
     } catch(e) {
-        console.error(e);
+        Logger.Error(e);
     }
 };
 
@@ -259,11 +259,11 @@ const SaveMessage = async (message) => {
         try {
             await connection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content });
         } catch(err) {
-            console.error(err);
+            Logger.Error(err);
         }
         connection.end();
     } catch(err) {
-        console.error(err);
+        Logger.Error(err);
     }
 };
 
@@ -276,11 +276,11 @@ const LoadMessage = async (message) => {
         try {
             results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
         } catch(err) {
-            console.error(err);
+            Logger.Error(err);
         }
         connection.end();
     } catch(err) {
-        console.error(err);
+        Logger.Error(err);
     }
 
     return results?.[0];
@@ -307,14 +307,14 @@ client.events.on(Events.READY, async (data) => {
     for(const server of data.guilds)
         ConnectedServers.set(server.id, server);
 
-    console.log('READY');
+    Logger.Log('READY');
 });
 
 client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     const data = interaction.data, user = interaction.member?.user;
     if(!(data && user)) return;
 
-    console.log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
+    Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
 
     if(data.name != 'who') return;
 
@@ -511,13 +511,13 @@ const VerifyUser = async (code, xgmid) => {
     }));
 
     if(!res?.access_token) {
-        console.warn('Verify: token request failed.');
+        Logger.Warn('Verify: token request failed.');
         return { code: 400 };
     }
 
     const user = await SafePromise(Actions.User.Get('@me', { authorization: new Authorization(res.access_token, TokenTypes.BEARER) }));
     if(!user?.id) {
-        console.warn('Verify: user request failed.');
+        Logger.Warn('Verify: user request failed.');
         return { code: 500 };
     }
 
@@ -540,7 +540,7 @@ const VerifyUser = async (code, xgmid) => {
     } else {
         const clone = await usersDb.findOne({ xgmid });
         if(clone) {
-            console.log(`Verify: remove ${user.id}`);
+            Logger.Log(`Verify: remove ${user.id}`);
             await usersDb.remove({ xgmid });
             const member = ConnectedServers.get(config.server).members.get(clone._id);
             if(member) {
@@ -549,7 +549,7 @@ const VerifyUser = async (code, xgmid) => {
             }
         }
 
-        console.log(`Verify: ${user.id} -> ${xgmid}`);
+        Logger.Log(`Verify: ${user.id} -> ${xgmid}`);
         await usersDb.insert({ _id: user.id, xgmid });
         usersDb.nedb.persistence.compactDatafile();
 
@@ -598,7 +598,7 @@ const webApiFuncs = {
 
         const data = await Misc.ReadIncomingData(request);
 
-        console.log(`Verify: delete! ${userInfo._id}`);
+        Logger.Log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
         usersDb.nedb.persistence.compactDatafile();
         SendMessage(config.channel.log, `Отвязка аккаунта ${Tools.Mentions.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
@@ -617,7 +617,7 @@ const webApiFuncs = {
             return response.statusCode = 400;
 
         const status = request.headers.status || '';
-        console.log(`S: ${xgmid} - '${status}'`);
+        Logger.Log(`S: ${xgmid} - '${status}'`);
 
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
@@ -677,7 +677,7 @@ const webApiFuncs = {
             await SendMessage(channelid, (text.length > 2000) ? text.substring(0, 1999) : text);
             response.statusCode = 200;
         } catch(e) {
-            console.warn(e);
+            Logger.Warn(e);
             response.statusCode = 403;
         }
     },
@@ -696,7 +696,7 @@ const webApiFuncs = {
             await SendMessage(config.channel.system, (text.length > 2000) ? text.substring(0, 1999) : text);
             response.statusCode = 200;
         } catch(e) {
-            console.warn(e);
+            Logger.Warn(e);
             response.statusCode = 403;
         }
 
@@ -714,7 +714,7 @@ const HandleRequest = async (request, response) => {
     if(!webApiFuncs.hasOwnProperty(request.url))
         return response.statusCode = 404;
 
-    console.log(`POST '${request.url}'`);
+    Logger.Log(`POST '${request.url}'`);
     await webApiFuncs[request.url](request, response);
 };
 
@@ -722,7 +722,7 @@ AUTH_SVC && CLIENT_ID && CLIENT_SECRET && REDIRECT_URL && require('http').create
     try {
         await HandleRequest(request, response);
     } catch(e) {
-        console.error(e);
+        Logger.Error(e);
         response.statusCode = 500;
     }
     response.end();
