@@ -9,7 +9,7 @@
     "license": "MIT",
     "main": "bot.js",
     "dependencies": {
-        "discord-slim": "2.0.0-dev.14",
+        "discord-slim": "^2.0.0",
         "fast-xml-parser": "^3.19.0",
         "mariadb": "^2.5.3",
         "nedb-promise": "^2.0.1"
