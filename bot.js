@@ -311,7 +311,7 @@ client.events.on(Events.READY, async (data) => {
 });
 
 client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
-    const data = interaction.data, user = interaction.member?.user;
+    const data = interaction.data, user = interaction.user;
     if(!(data && user)) return;
 
     Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
