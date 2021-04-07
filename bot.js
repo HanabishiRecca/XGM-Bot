@@ -57,10 +57,6 @@ client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
 const
-    ConnectedServers = new Map(),
-    SafePromise = (promise) => new Promise((resolve) => promise.then((result) => resolve(result)).catch((error) => { Logger.Warn(error); resolve(null); }));
-
-const
     SendMessage = (channel_id, content, embed) => Actions.Message.Create(channel_id, { content, embed }),
     HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
     InProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active')),
@@ -68,7 +64,7 @@ const
 
 const SendPM = async (user_id, content) => {
     const channel = await Actions.User.CreateDM({ recipient_id: user_id });
-    return SafePromise(SendMessage(channel.id, content));
+    return SendMessage(channel.id, content).catch(Logger.Warn);
 };
 
 const MarkMessages = (() => {
@@ -117,7 +113,7 @@ const appOptions = {
 };
 
 const CheckNews = async () => {
-    const data = await Misc.HttpsGet('https://xgm.guru/rss');
+    const data = await Misc.HttpsGet('https://xgm.guru/rss').catch(Logger.Warn);
     if(!data?.length) return;
 
     const feed = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' });
@@ -163,6 +159,8 @@ const CheckNews = async () => {
 
 setInterval(CheckNews, 600000);
 
+const ConnectedServers = new Map();
+
 const RoleSwitch = async (member, role, enable) => {
     if(enable) {
         if(!HasRole(member, role))
@@ -176,7 +174,13 @@ const RoleSwitch = async (member, role, enable) => {
 const SyncUser = async (userid, xgmid, banned) => {
     if(userid == client.user.id) return;
 
-    const response = JSON.parse(await SafePromise(Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`)));
+    let response;
+    try {
+        response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+    } catch(e) {
+        return Logger.Warn(e);
+    }
+
     if(!response) return;
 
     const
@@ -501,22 +505,22 @@ const
     REDIRECT_URL = process.env.REDIRECT_URL;
 
 const VerifyUser = async (code, xgmid) => {
-    const res = await SafePromise(Actions.OAuth2.TokenExchange({
+    const res = await Actions.OAuth2.TokenExchange({
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
         grant_type: Helpers.OAuth2GrantTypes.AUTHORIZATION_CODE,
         redirect_uri: REDIRECT_URL,
         scope: Helpers.OAuth2Scopes.IDENTIFY,
         code,
-    }));
+    }).catch(Logger.Warn);
 
-    if(!res?.access_token) {
+    if(!res) {
         Logger.Warn('Verify: token request failed.');
         return { code: 400 };
     }
 
-    const user = await SafePromise(Actions.User.Get('@me', { authorization: new Authorization(res.access_token, TokenTypes.BEARER) }));
-    if(!user?.id) {
+    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, TokenTypes.BEARER) }).catch(Logger.Warn);
+    if(!user) {
         Logger.Warn('Verify: user request failed.');
         return { code: 500 };
     }
@@ -616,8 +620,7 @@ const webApiFuncs = {
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
-        const status = request.headers.status || '';
-        Logger.Log(`S: ${xgmid} - '${status}'`);
+        Logger.Log(`S: ${xgmid} - '${request.headers.status}'`);
 
         const userInfo = await usersDb.findOne({ xgmid });
         if(!userInfo)
@@ -627,7 +630,7 @@ const webApiFuncs = {
             return response.statusCode = 418;
 
         (async () => {
-            SyncUser(userInfo._id, xgmid, await SafePromise(Actions.Ban.Get(config.server, userInfo._id)));
+            SyncUser(userInfo._id, xgmid, await Actions.Ban.Get(config.server, userInfo._id).catch(Logger.Warn));
         })();
 
         response.statusCode = 200;
