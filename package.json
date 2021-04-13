@@ -8,6 +8,7 @@
     "repository": "https://github.com/HanabishiRecca/XGM-Bot",
     "license": "MIT",
     "main": "bot.js",
+    "type": "module",
     "dependencies": {
         "discord-slim": "^2.0.0",
         "fast-xml-parser": "^3.19.0",

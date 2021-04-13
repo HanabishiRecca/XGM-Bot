@@ -1,9 +1,11 @@
 'use strict';
 
-const htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' };
-exports.DecodeHtmlEntity = str => str.replace(/&amp;/g, '&').replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
+import https from 'https';
 
-const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
+const htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' };
+export const DecodeHtmlEntity = (str) => str.replace(/&amp;/g, '&').replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
+
+export const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
     const chunks = [];
     let dataLen = 0;
 
@@ -26,14 +28,9 @@ const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
     });
 });
 
-exports.ReadIncomingData = ReadIncomingData;
-
-const https = require('https');
-exports.HttpsGet = url => new Promise((resolve, reject) => {
+export const HttpsGet = (url) => new Promise((resolve, reject) => {
     https.get(url, response => {
-        if(response.statusCode != 200)
-            return resolve(null);
-
+        if(response.statusCode != 200) return resolve(null);
         ReadIncomingData(response).then(resolve).catch(reject);
     });
 });

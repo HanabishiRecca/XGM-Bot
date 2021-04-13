@@ -1,6 +1,6 @@
 'use strict';
 
-const Logger = require('./log.js');
+import Logger from './log.js';
 
 const Shutdown = (err) => {
     Logger.Error(err);
@@ -18,13 +18,12 @@ const storagePath = process.env.STORAGE;
 
 global.gc && setInterval(global.gc, 3600000);
 
-const
-    Database = require('nedb-promise'),
-    MariaDB = require('mariadb'),
-    { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes, Tools } = require('discord-slim'),
-    XmlParser = require('fast-xml-parser'),
-    Misc = require('./misc.js'),
-    config = require('./config.json');
+import Database from 'nedb-promise';
+import MariaDB from 'mariadb';
+import { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes, Tools } from 'discord-slim';
+import XmlParser from 'fast-xml-parser';
+import { HttpsGet, ReadIncomingData, DecodeHtmlEntity } from './misc.js';
+import config from './config.js';
 
 const
     appDb = Database({ filename: `${storagePath}/app.db`, autoload: true }),
@@ -68,15 +67,11 @@ const SendPM = async (user_id, content) => {
 };
 
 const MarkMessages = (() => {
-    const
-        list = require('./marks.js').list,
-        msgs = new Map();
-
-    for(const mark of list)
+    const msgs = new Map();
+    for(const mark of config.marks)
         msgs.has(mark.message) ?
             msgs.get(mark.message).marks.push(mark) :
             msgs.set(mark.message, { id: mark.message, channel: mark.channel, marks: [mark] });
-
     return msgs;
 })();
 
@@ -113,7 +108,7 @@ const appOptions = {
 };
 
 const CheckNews = async () => {
-    const data = await Misc.HttpsGet('https://xgm.guru/rss').catch(Logger.Warn);
+    const data = await HttpsGet('https://xgm.guru/rss').catch(Logger.Warn);
     if(!data?.length) return;
 
     const feed = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' });
@@ -136,8 +131,8 @@ const CheckNews = async () => {
 
         if(time > lastTime) {
             const embed = {
-                title: Misc.DecodeHtmlEntity(item.title),
-                description: Misc.DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
+                title: DecodeHtmlEntity(item.title),
+                description: DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
                 url: item.link,
                 footer: { text: item.author },
                 timestamp: dt,
@@ -176,7 +171,7 @@ const SyncUser = async (userid, xgmid, banned) => {
 
     let response;
     try {
-        response = JSON.parse(await Misc.HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+        response = JSON.parse(await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
     } catch(e) {
         return Logger.Warn(e);
     }
@@ -600,7 +595,7 @@ const webApiFuncs = {
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        const data = await Misc.ReadIncomingData(request);
+        const data = await ReadIncomingData(request);
 
         Logger.Log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
@@ -652,7 +647,7 @@ const webApiFuncs = {
         if(len > 4000)
             return response.statusCode = 413;
 
-        const data = await Misc.ReadIncomingData(request);
+        const data = await ReadIncomingData(request);
         if(!data)
             return response.statusCode = 400;
 
@@ -671,7 +666,7 @@ const webApiFuncs = {
         if(len > 4000)
             return response.statusCode = 413;
 
-        const data = await Misc.ReadIncomingData(request);
+        const data = await ReadIncomingData(request);
         if(!data)
             return response.statusCode = 400;
 
@@ -690,7 +685,7 @@ const webApiFuncs = {
         if(len > 4000)
             return response.statusCode = 413;
 
-        const data = await Misc.ReadIncomingData(request);
+        const data = await ReadIncomingData(request);
         if(!data)
             return response.statusCode = 400;
 
@@ -721,7 +716,9 @@ const HandleRequest = async (request, response) => {
     await webApiFuncs[request.url](request, response);
 };
 
-AUTH_SVC && CLIENT_ID && CLIENT_SECRET && REDIRECT_URL && require('http').createServer(async (request, response) => {
+import http from 'http';
+
+AUTH_SVC && CLIENT_ID && CLIENT_SECRET && REDIRECT_URL && http.createServer(async (request, response) => {
     try {
         await HandleRequest(request, response);
     } catch(e) {
