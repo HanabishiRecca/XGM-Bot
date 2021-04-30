@@ -166,16 +166,18 @@ const RoleSwitch = async (member, role, enable) => {
     }
 };
 
+const RequestXgmUser = async (xgmid) => {
+    try {
+        return JSON.parse(await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+    } catch(e) {
+        Logger.Warn(e);
+    }
+};
+
 const SyncUser = async (userid, xgmid, banned) => {
     if(userid == client.user.id) return;
 
-    let response;
-    try {
-        response = JSON.parse(await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
-    } catch(e) {
-        return Logger.Warn(e);
-    }
-
+    const response = await RequestXgmUser(xgmid);
     if(!response) return;
 
     const
@@ -323,14 +325,76 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     const _id = options[0]?.value?.toString?.();
     if(!_id) return;
 
-    const userData = await usersDb.findOne({ _id });
+    const embeds = [];
+
+    try {
+        const target = await Actions.User.Get(_id);
+        embeds.push({
+            title: `${target.username}\`#${target.discriminator}\``,
+            thumbnail: { url: Tools.CdnImages.UserAvatar(target) },
+            color: 16764928,
+        });
+    } catch(e) {
+        embeds.push({
+            description: (e.code == 404) ?
+                'Указан несуществующий пользователь.' :
+                'Ошибка запроса к Discord.',
+            color: 16716876,
+        });
+    }
+
+    const xgmid = (await usersDb.findOne({ _id }))?.xgmid;
+    if(xgmid) {
+        const xgmres = await RequestXgmUser(xgmid);
+        if(xgmres) {
+            const info = xgmres.info;
+            if(info) {
+                embeds.push({
+                    title: info.user.username,
+                    url: XgmUserLink(xgmid),
+                    thumbnail: {
+                        url: info.avatar.big.startsWith('https:') ?
+                            info.avatar.big :
+                            `https://xgm.guru/${info.avatar.big}`,
+                    },
+                    fields: [
+                        {
+                            name: 'Уровень',
+                            value: String(info.user.level),
+                        },
+                        {
+                            name: 'Опыт',
+                            value: String(info.user.level_xp),
+                        },
+                    ],
+                    color: 16764928,
+                });
+            } else {
+                embeds.push({
+                    description: 'Привязан к несуществующему пользователю XGM.',
+                    color: 16716876,
+                });
+            }
+        } else {
+            embeds.push({
+                description: 'Ошибка запроса к XGM.',
+                color: 16716876,
+            });
+        }
+    } else {
+        embeds.push({
+            description: 'Нет привязки к XGM.',
+            color: 16716876,
+        });
+    }
+
     Actions.Application.CreateInteractionResponse(interaction.id, interaction.token, {
         type: Helpers.InteractionResponseTypes.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-            content: userData ? XgmUserLink(userData.xgmid) : 'Пользователь не сопоставлен.',
-            flags: options[1]?.value ? undefined : Helpers.InteractionResponseFlags.EPHEMERAL,
+            embeds,
+            flags: options[1]?.value ? 0 : Helpers.InteractionResponseFlags.EPHEMERAL,
         },
-    });
+    }).catch(Logger.Error);
 });
 
 client.events.on(Events.MESSAGE_CREATE, async (message) => {
