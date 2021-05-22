@@ -37,6 +37,31 @@ const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE &
     bigNumberStrings: true,
 } : undefined;
 
+let mdbConnection;
+
+const MdbConnect = async () => {
+    if(!mdbConnectionOptions) return;
+
+    mdbConnection && mdbConnection.end();
+    mdbConnection = null;
+
+    try {
+        mdbConnection = await MariaDB.createConnection(mdbConnectionOptions);
+    } catch(e) {
+        Logger.Error(e);
+        mdbConnection = null;
+        setTimeout(MdbConnect, 1000);
+        return;
+    }
+
+    mdbConnection.on('error', (e) => {
+        Logger.Error(e);
+        e.fatal && MdbConnect();
+    });
+};
+
+MdbConnect();
+
 const authorization = new Authorization(process.env.TOKEN);
 
 Actions.setDefaultRequestOptions({
@@ -253,38 +278,13 @@ const CheckBan = async (data, flag) => {
 };
 
 const SaveMessage = async (message) => {
-    if(!mdbConnectionOptions) return;
-    if(!(message.content && message.guild_id)) return;
-
-    try {
-        const connection = await MariaDB.createConnection(mdbConnectionOptions);
-        try {
-            await connection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content });
-        } catch(err) {
-            Logger.Error(err);
-        }
-        connection.end();
-    } catch(err) {
-        Logger.Error(err);
-    }
+    if(!mdbConnection || !message.content || (message.guild_id != config.server) || (message.author.id == client.user.id)) return;
+    await mdbConnection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content }).catch(() => undefined);
 };
 
 const LoadMessage = async (message) => {
-    if(!mdbConnectionOptions) return;
-
-    let results;
-    try {
-        const connection = await MariaDB.createConnection(mdbConnectionOptions);
-        try {
-            results = await connection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]);
-        } catch(err) {
-            Logger.Error(err);
-        }
-        connection.end();
-    } catch(err) {
-        Logger.Error(err);
-    }
-
+    if(!mdbConnection || (message.guild_id != config.server)) return;
+    const results = await mdbConnection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]).catch(() => undefined);
     return results?.[0];
 };
 
@@ -398,14 +398,9 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     }).catch(Logger.Error);
 });
 
-client.events.on(Events.MESSAGE_CREATE, async (message) => {
-    if(message.author.id == client.user.id) return;
-    SaveMessage(message);
-});
+client.events.on(Events.MESSAGE_CREATE, SaveMessage);
 
 client.events.on(Events.MESSAGE_UPDATE, async (message) => {
-    if(!message.author || (message.guild_id != config.server) || (message.author.id == client.user.id)) return;
-
     const result = await LoadMessage(message);
     SaveMessage(message);
 
@@ -438,8 +433,6 @@ client.events.on(Events.MESSAGE_UPDATE, async (message) => {
 });
 
 client.events.on(Events.MESSAGE_DELETE, async (message) => {
-    if(message.guild_id != config.server) return;
-
     const result = await LoadMessage(message);
     if(!result) return;
 
