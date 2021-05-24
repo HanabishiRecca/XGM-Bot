@@ -42,6 +42,8 @@ let mdbConnection;
 const MdbConnect = async () => {
     if(!mdbConnectionOptions) return;
 
+    Logger.Log('Mdb connecting...');
+
     mdbConnection && mdbConnection.end();
     mdbConnection = null;
 
@@ -53,6 +55,8 @@ const MdbConnect = async () => {
         setTimeout(MdbConnect, 1000);
         return;
     }
+
+    Logger.Log('Mdb connected.');
 
     mdbConnection.on('error', (e) => {
         Logger.Error(e);
