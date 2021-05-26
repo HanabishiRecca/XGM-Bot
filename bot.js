@@ -183,6 +183,38 @@ const CheckNews = async () => {
 
 setInterval(CheckNews, 600000);
 
+setTimeout(async () => {
+    const UpdateStats = async () => {
+        if(!mdbConnection) {
+            Logger.Error('Can\'t make stats: no mdb connection.');
+            return;
+        }
+
+        const stats = await mdbConnection.query('select user,count(id) from messages where (dt >= (CURDATE() - INTERVAL 7 DAY)) group by user order by count(id) desc limit 20;').catch(() => undefined);
+        if(!stats) return;
+
+        let text = '';
+        let index = 1;
+
+        for(const stat of stats) {
+            text += `${index}. ${Tools.Mentions.User(stat.user)} → ${stat['count(id)']}\n`;
+            index++;
+        }
+
+        Actions.Message.Edit(config.stats.channel, config.stats.message, {
+            embed: {
+                title: 'Топ активности за неделю',
+                description: text,
+                timestamp: new Date().toISOString(),
+                color: 16764928,
+            },
+        });
+    };
+
+    UpdateStats();
+    setInterval(UpdateStats, 3600000);
+}, 10000);
+
 const ConnectedServers = new Map();
 
 const RoleSwitch = async (member, role, enable) => {

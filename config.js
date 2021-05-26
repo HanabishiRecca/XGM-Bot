@@ -54,4 +54,9 @@ export default {
         //reforged
         { channel: marksChannel, message: versionsMessage, role: '659464540513370128', emoji: '659463638507192381' },
     ],
+
+    stats: {
+        channel: '847124828162621440',
+        message: '847126020473094184',
+    },
 };
