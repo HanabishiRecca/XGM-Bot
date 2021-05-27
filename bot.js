@@ -12,22 +12,17 @@ process.on('uncaughtException', Shutdown);
 process.on('unhandledRejection', Shutdown);
 
 !process.env.TOKEN && Shutdown('Token required.');
-
-const storagePath = process.env.STORAGE;
-!storagePath && Shutdown('Storage path required.');
+!process.env.STORAGE && Shutdown('Storage path required.');
 
 global.gc && setInterval(global.gc, 3600000);
 
 import Database from 'nedb-promise';
 import MariaDB from 'mariadb';
 import { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes, Tools } from 'discord-slim';
-import XmlParser from 'fast-xml-parser';
-import { HttpsGet, ReadIncomingData, DecodeHtmlEntity } from './misc.js';
+import { HttpsGet, ReadIncomingData } from './misc.js';
 import config from './config.js';
 
-const
-    appDb = Database({ filename: `${storagePath}/app.db`, autoload: true }),
-    usersDb = Database({ filename: `${storagePath}/users.db`, autoload: true });
+const usersDb = Database({ filename: `${process.env.STORAGE}/users.db`, autoload: true });
 
 const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE && process.env.MDB_USER && process.env.MDB_PASSWORD) ? {
     host: process.env.MDB_HOST,
@@ -131,57 +126,6 @@ const SetMarks = async (serverEmojis) => {
         }
     }
 };
-
-const appOptions = {
-    lastNewsTime: { _id: 'lastNewsTime' },
-};
-
-const CheckNews = async () => {
-    const data = await HttpsGet('https://xgm.guru/rss').catch(Logger.Warn);
-    if(!data?.length) return;
-
-    const feed = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' });
-    if(!feed?.rss?.channel?.item) return;
-
-    const
-        option = await appDb.findOne(appOptions.lastNewsTime),
-        lastTime = option ? option.value : Date.now(),
-        items = feed.rss.channel.item;
-
-    let maxTime = 0;
-    for(let i = items.length - 1; i >= 0; i--) {
-        const
-            item = items[i],
-            dt = new Date(item.pubDate),
-            time = dt.getTime();
-
-        if(time > maxTime)
-            maxTime = time;
-
-        if(time > lastTime) {
-            const embed = {
-                title: DecodeHtmlEntity(item.title),
-                description: DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
-                url: item.link,
-                footer: { text: item.author },
-                timestamp: dt,
-                color: 16764928,
-                image: item.enclosure ? { url: item.enclosure.url } : null,
-            };
-            SendMessage(config.channel.news, '', embed);
-
-            embed.timestamp = undefined;
-            SendMessage(config.channel.newsCode, `\`\`\`b/post\n${JSON.stringify({ content: 'https://discord.gg/TuSHPU6', embed }, null, 4)}\`\`\``);
-        }
-    }
-
-    if(lastTime != maxTime) {
-        appDb.update(appOptions.lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
-        appDb.nedb.persistence.compactDatafile();
-    }
-};
-
-setInterval(CheckNews, 600000);
 
 const ConnectedServers = new Map();
 
@@ -507,7 +451,6 @@ client.events.on(Events.GUILD_CREATE, async (server) => {
     if(server.id != config.server) return;
 
     SetMarks(server.emojis);
-    CheckNews();
 });
 
 client.events.on(Events.GUILD_UPDATE, async (update) => {
