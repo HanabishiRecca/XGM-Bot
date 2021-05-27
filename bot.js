@@ -368,7 +368,7 @@ const SendDiffMsg = (title, data, message, link) => {
 
     link && embed.fields.push({
         name: 'Переход',
-        value: `${Helpers.HOST}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
+        value: Tools.Link.Message(message),
         inline: false,
     });
 
