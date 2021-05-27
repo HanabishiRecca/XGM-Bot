@@ -226,13 +226,13 @@ const CheckBan = async (data, flag) => {
 };
 
 const SaveMessage = async (message) => {
-    if(!mdbConnection || !message.content || (message.guild_id != config.server) || (message.author.id == client.user.id)) return;
-    await mdbConnection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content }).catch(() => undefined);
+    if(!mdbConnection || (message.guild_id != config.server) || (message.author.id == client.user.id)) return;
+    await mdbConnection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content || null }).catch(Logger.Error);
 };
 
 const LoadMessage = async (message) => {
     if(!mdbConnection || (message.guild_id != config.server)) return;
-    const results = await mdbConnection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]).catch(() => undefined);
+    const results = await mdbConnection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]).catch(Logger.Error);
     return results?.[0];
 };
 
@@ -348,18 +348,13 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
 
 client.events.on(Events.MESSAGE_CREATE, SaveMessage);
 
-client.events.on(Events.MESSAGE_UPDATE, async (message) => {
-    const result = await LoadMessage(message);
-    SaveMessage(message);
-
-    if(!result) return;
-
-    SendMessage(config.channel.deleted, '', {
-        title: 'Сообщение изменено',
+const SendDiffMsg = (title, data, message, link) => {
+    const embed = {
+        title,
         fields: [
             {
                 name: 'Автор',
-                value: Tools.Mentions.User(result.user),
+                value: Tools.Mentions.User(data.user),
                 inline: true,
             },
             {
@@ -367,43 +362,39 @@ client.events.on(Events.MESSAGE_UPDATE, async (message) => {
                 value: Tools.Mentions.Channel(message.channel_id),
                 inline: true,
             },
-            {
-                name: 'Содержимое',
-                value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
-            },
-            {
-                name: 'Переход',
-                value: `${Helpers.HOST}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
-            },
         ],
-        timestamp: new Date(result.dt),
+        timestamp: new Date(data.dt).toISOString(),
+    };
+
+    link && embed.fields.push({
+        name: 'Переход',
+        value: `${Helpers.HOST}/channels/${message.guild_id}/${message.channel_id}/${message.id}`,
+        inline: false,
     });
+
+    const text = data.text;
+    if(text) {
+        let n = 1;
+        for(let i = 0; i < text.length; i += 1024)
+            embed.fields.push({
+                name: `Содержимое (${n++})`,
+                value: text.substr(i, 1024),
+                inline: false,
+            });
+    }
+
+    SendMessage(config.channel.deleted, '', embed);
+};
+
+client.events.on(Events.MESSAGE_UPDATE, async (message) => {
+    const data = await LoadMessage(message);
+    SaveMessage(message);
+    data && SendDiffMsg('Сообщение изменено', data, message, true);
 });
 
 client.events.on(Events.MESSAGE_DELETE, async (message) => {
-    const result = await LoadMessage(message);
-    if(!result) return;
-
-    SendMessage(config.channel.deleted, '', {
-        title: 'Сообщение удалено',
-        fields: [
-            {
-                name: 'Автор',
-                value: Tools.Mentions.User(result.user),
-                inline: true,
-            },
-            {
-                name: 'Канал',
-                value: Tools.Mentions.Channel(message.channel_id),
-                inline: true,
-            },
-            {
-                name: 'Содержимое',
-                value: (result.text.length > 1024) ? result.text.substr(0, 1024) : result.text,
-            },
-        ],
-        timestamp: new Date(result.dt),
-    });
+    const data = await LoadMessage(message);
+    data && SendDiffMsg('Сообщение удалено', data, message, false);
 });
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
