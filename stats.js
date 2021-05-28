@@ -32,7 +32,7 @@ import config from './config.js';
 
     connection.end();
 
-    if(!stats) return;
+    if(!stats) Shutdown('No stats received.');;
 
     let text = '';
     let index = 1;
@@ -50,4 +50,5 @@ import config from './config.js';
     }, { authorization: new Authorization(process.env.TOKEN) });
 
     Logger.Log('Stats job finished.');
+    process.exit();
 })();

@@ -33,15 +33,14 @@ Actions.setDefaultRequestOptions({
 
 (async () => {
     const data = await HttpsGet('https://xgm.guru/rss');
-    if(!data?.length) return;
+    if(!data?.length) Shutdown('No data received.');
 
-    const feed = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' });
-    if(!feed?.rss?.channel?.item) return;
+    const items = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' })?.feed?.rss?.channel?.item;
+    if(!items) Shutdown('Incorrect data received.');
 
     const
         option = await appDb.findOne(appOptions.lastNewsTime),
-        lastTime = option ? option.value : Date.now(),
-        items = feed.rss.channel.item;
+        lastTime = option?.value ?? Date.now();
 
     let maxTime = 0;
     for(let i = items.length - 1; i >= 0; i--) {
@@ -76,4 +75,5 @@ Actions.setDefaultRequestOptions({
     }
 
     Logger.Log('News check job finished.');
+    process.exit();
 })();

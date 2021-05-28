@@ -226,7 +226,7 @@ const CheckBan = async (data, flag) => {
 };
 
 const SaveMessage = async (message) => {
-    if(!mdbConnection || (message.guild_id != config.server) || (message.author.id == client.user.id)) return;
+    if(!mdbConnection || (message.guild_id != config.server) || !message.author || (message.author.id == client.user.id)) return;
     await mdbConnection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content || null }).catch(Logger.Error);
 };
 
