@@ -387,6 +387,7 @@ const SendDiffMsg = (title, data, message, link) => {
 };
 
 client.events.on(Events.MESSAGE_UPDATE, async (message) => {
+    if(!message.content) return;
     const data = await LoadMessage(message);
     SaveMessage(message);
     data && SendDiffMsg('Сообщение изменено', data, message, true);
