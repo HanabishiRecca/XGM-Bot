@@ -12,24 +12,19 @@ process.on('unhandledRejection', Shutdown);
 
 Logger.Log('News check job start.');
 
-!process.env.TOKEN && Shutdown('Token required.');
+const WH_NEWS_ID = process.env.WH_NEWS_ID, WH_NEWS_TOKEN = process.env.WH_NEWS_TOKEN;
+
+!(WH_NEWS_ID && WH_NEWS_TOKEN) && Shutdown('No credentials.');
 !process.env.STORAGE && Shutdown('Storage path required.');
 
 import Database from 'nedb-promise';
 import XmlParser from 'fast-xml-parser';
-import { Authorization, Actions } from 'discord-slim';
+import { Actions } from 'discord-slim';
 import { HttpsGet, DecodeHtmlEntity } from './misc.js';
-import config from './config.js';
 
 const appDb = Database({ filename: `${process.env.STORAGE}/app.db`, autoload: true });
 
-const appOptions = {
-    lastNewsTime: { _id: 'lastNewsTime' },
-};
-
-Actions.setDefaultRequestOptions({
-    authorization: new Authorization(process.env.TOKEN),
-});
+const lastNewsTime = { _id: 'lastNewsTime' };
 
 (async () => {
     const data = await HttpsGet('https://xgm.guru/rss');
@@ -39,7 +34,7 @@ Actions.setDefaultRequestOptions({
     if(!items) Shutdown('Incorrect data received.');
 
     const
-        option = await appDb.findOne(appOptions.lastNewsTime),
+        option = await appDb.findOne(lastNewsTime),
         lastTime = option?.value ?? Date.now();
 
     let maxTime = 0;
@@ -62,15 +57,12 @@ Actions.setDefaultRequestOptions({
                 color: 16764928,
                 image: item.enclosure ? { url: item.enclosure.url } : null,
             };
-            await Actions.Message.Create(config.channel.news, { embed });
-
-            embed.timestamp = undefined;
-            await Actions.Message.Create(config.channel.newsCode, { content: `\`\`\`b/post\n${JSON.stringify({ content: 'https://discord.gg/TuSHPU6', embed }, null, 4)}\`\`\`` });
+            await Actions.Webhook.Execute(WH_NEWS_ID, WH_NEWS_TOKEN, { embeds: [embed] }).catch(Logger.Error);
         }
     }
 
     if(lastTime != maxTime) {
-        await appDb.update(appOptions.lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
+        await appDb.update(lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
         appDb.nedb.persistence.compactDatafile();
     }
 

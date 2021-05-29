@@ -17,11 +17,6 @@ export default {
         voice: '841646210749825044',
     },
 
-    channel: {
-        news: '543461066596941857',
-        newsCode: '613460461161021462',
-    },
-
     marks: [
         //PLATFORMS
 
