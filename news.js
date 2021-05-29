@@ -30,8 +30,8 @@ const lastNewsTime = { _id: 'lastNewsTime' };
     const data = await HttpsGet('https://xgm.guru/rss');
     if(!data?.length) Shutdown('No data received.');
 
-    const items = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' })?.feed?.rss?.channel?.item;
-    if(!items) Shutdown('Incorrect data received.');
+    const items = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' })?.rss?.channel?.item;
+    if(!items?.length) Shutdown('Incorrect data received.');
 
     const
         option = await appDb.findOne(lastNewsTime),
