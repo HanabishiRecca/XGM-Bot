@@ -20,7 +20,6 @@ export default {
     channel: {
         news: '543461066596941857',
         newsCode: '613460461161021462',
-        system: '699323602629034105',
     },
 
     marks: [

@@ -590,6 +590,16 @@ const VerifyUser = async (code, xgmid) => {
     return { code: retCode, content: user.id };
 };
 
+const WH_SYSLOG_ID = process.env.WH_SYSLOG_ID, WH_SYSLOG_TOKEN = process.env.WH_SYSLOG_TOKEN;
+
+const SendSysLogMsg = async (content) => {
+    if(!(WH_SYSLOG_ID && WH_SYSLOG_TOKEN)) return;
+    if(!content) return;
+
+    for(let i = 0; i < content.length; i += 2000)
+        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substr(i, 2000) }).catch(Logger.Error);
+};
+
 const webApiFuncs = {
     '/verify': async (request, response) => {
         const
@@ -713,14 +723,7 @@ const webApiFuncs = {
         if(!data)
             return response.statusCode = 400;
 
-        const text = data.toString();
-        try {
-            await SendMessage(config.channel.system, (text.length > 2000) ? text.substring(0, 1999) : text);
-            response.statusCode = 200;
-        } catch(e) {
-            Logger.Warn(e);
-            response.statusCode = 403;
-        }
+        SendSysLogMsg(String(data));
 
         response.statusCode = 200;
     },
