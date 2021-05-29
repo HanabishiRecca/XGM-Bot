@@ -226,12 +226,12 @@ const CheckBan = async (data, flag) => {
 };
 
 const SaveMessage = async (message) => {
-    if(!mdbConnection || (message.guild_id != config.server) || !message.author || (message.author.id == client.user.id)) return;
+    if(!mdbConnection) return;
     await mdbConnection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content || null }).catch(Logger.Error);
 };
 
 const LoadMessage = async (message) => {
-    if(!mdbConnection || (message.guild_id != config.server)) return;
+    if(!mdbConnection) return;
     const results = await mdbConnection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]).catch(Logger.Error);
     return results?.[0];
 };
@@ -250,6 +250,47 @@ const AddServer = (server) =>
         members: new Map(),
     });
 
+const WH_MSGLOG_ID = process.env.WH_MSGLOG_ID, WH_MSGLOG_TOKEN = process.env.WH_MSGLOG_TOKEN;
+
+const SendDiffMsg = (title, data, message, link) => {
+    if(!(WH_MSGLOG_ID && WH_MSGLOG_TOKEN)) return;
+
+    const embed = {
+        title,
+        fields: [
+            {
+                name: 'Автор',
+                value: Tools.Mentions.User(data.user),
+                inline: true,
+            },
+            {
+                name: 'Канал',
+                value: Tools.Mentions.Channel(message.channel_id),
+                inline: true,
+            },
+        ],
+        timestamp: new Date(data.dt).toISOString(),
+    };
+
+    link && embed.fields.push({
+        name: 'Переход',
+        value: Tools.Link.Message(message),
+        inline: false,
+    });
+
+    const text = data.text;
+    if(text) {
+        let n = 1;
+        for(let i = 0; i < text.length; i += 1024)
+            embed.fields.push({
+                name: `Содержимое (${n++})`,
+                value: text.substr(i, 1024),
+                inline: false,
+            });
+    }
+
+    Actions.Webhook.Execute(WH_MSGLOG_ID, WH_MSGLOG_TOKEN, { embeds: [embed] }).catch(Logger.Error);
+};
 
 client.events.on(Events.READY, async (data) => {
     ConnectedServers.clear();
@@ -346,54 +387,27 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     }).catch(Logger.Error);
 });
 
-client.events.on(Events.MESSAGE_CREATE, SaveMessage);
-
-const SendDiffMsg = (title, data, message, link) => {
-    const embed = {
-        title,
-        fields: [
-            {
-                name: 'Автор',
-                value: Tools.Mentions.User(data.user),
-                inline: true,
-            },
-            {
-                name: 'Канал',
-                value: Tools.Mentions.Channel(message.channel_id),
-                inline: true,
-            },
-        ],
-        timestamp: new Date(data.dt).toISOString(),
-    };
-
-    link && embed.fields.push({
-        name: 'Переход',
-        value: Tools.Link.Message(message),
-        inline: false,
-    });
-
-    const text = data.text;
-    if(text) {
-        let n = 1;
-        for(let i = 0; i < text.length; i += 1024)
-            embed.fields.push({
-                name: `Содержимое (${n++})`,
-                value: text.substr(i, 1024),
-                inline: false,
-            });
-    }
-
-    SendMessage(config.channel.deleted, '', embed);
-};
+client.events.on(Events.MESSAGE_CREATE, async (message) => {
+    if((message.guild_id != config.server)
+        || !message.author
+        || message.author.bot
+    ) return;
+    SaveMessage(message);
+});
 
 client.events.on(Events.MESSAGE_UPDATE, async (message) => {
-    if(!message.content) return;
+    if((message.guild_id != config.server)
+        || !message.content
+        || !message.author
+        || message.author.bot
+    ) return;
     const data = await LoadMessage(message);
     SaveMessage(message);
     data && SendDiffMsg('Сообщение изменено', data, message, true);
 });
 
 client.events.on(Events.MESSAGE_DELETE, async (message) => {
+    if(message.guild_id != config.server) return;
     const data = await LoadMessage(message);
     data && SendDiffMsg('Сообщение удалено', data, message, false);
 });
