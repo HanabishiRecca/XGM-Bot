@@ -12,8 +12,12 @@ process.on('unhandledRejection', Shutdown);
 
 Logger.Log('Stats job start.');
 
-if(!(process.env.TOKEN && process.env.MDB_HOST && process.env.MDB_DATABASE && process.env.MDB_USER && process.env.MDB_PASSWORD))
-    Shutdown('No credentials.');
+!(process.env.TOKEN
+    && process.env.MDB_HOST
+    && process.env.MDB_DATABASE
+    && process.env.MDB_USER
+    && process.env.MDB_PASSWORD
+) && Shutdown('No credentials.');
 
 import MariaDB from 'mariadb';
 import { Authorization, Actions, Tools } from 'discord-slim';
@@ -28,17 +32,15 @@ import config from './config.js';
         bigNumberStrings: true,
     });
 
-    const stats = await connection.query('select user,count(id) from messages where (dt >= (CURDATE() - INTERVAL 7 DAY)) group by user order by count(id) desc limit 20;');
+    const stats = await connection.query('select user,count(id) from messages where (dt > (NOW() - INTERVAL 7 DAY)) group by user order by count(id) desc limit 20;');
 
     connection.end();
 
-    if(!stats) Shutdown('No stats received.');;
+    let text = '', index = 1;
 
-    let text = '';
-    let index = 1;
-
-    for(const stat of stats)
-        text += `${index++}. ${Tools.Mentions.User(stat.user)} → ${stat['count(id)']}\n`;
+    if(stats)
+        for(const stat of stats)
+            text += `${index++}. ${Tools.Mentions.User(stat.user)} → ${stat['count(id)']}\n`;
 
     await Actions.Message.Edit(config.stats.channel, config.stats.message, {
         embed: {
