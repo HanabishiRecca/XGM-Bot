@@ -309,6 +309,8 @@ client.events.on(Events.READY, async (data) => {
 });
 
 client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
+    if(interaction.type != Helpers.InteractionTypes.APPLICATION_COMMAND) return;
+
     const data = interaction.data, user = interaction.user ?? interaction.member?.user;
     if(!(data && user)) return;
 
