@@ -32,20 +32,22 @@ import config from './config.js';
         bigNumberStrings: true,
     });
 
-    const stats = await connection.query('select user,count(id) from messages where (dt > (NOW() - INTERVAL 7 DAY)) group by user order by count(id) desc limit 20;');
+    const stats = await connection.query('select user,count(id) as count from messages where (dt > (NOW() - INTERVAL 7 DAY)) group by user order by count desc limit 20;');
 
     connection.end();
 
-    let text = '', index = 1;
+    let description = '';
 
-    if(stats)
+    if(stats) {
+        let index = 1;
         for(const stat of stats)
-            text += `${index++}. ${Tools.Mentions.User(stat.user)} → ${stat['count(id)']}\n`;
+            description += `${index++}. ${Tools.Mentions.User(stat.user)} → ${stat.count}\n`;
+    }
 
     await Actions.Message.Edit(config.stats.channel, config.stats.message, {
         embed: {
             title: 'Топ активности за неделю',
-            description: text,
+            description,
             timestamp: new Date().toISOString(),
             color: 16764928,
         },
