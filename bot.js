@@ -18,7 +18,7 @@ global.gc && setInterval(global.gc, 3600000);
 
 import Database from 'nedb-promise';
 import MariaDB from 'mariadb';
-import { Client, ClientEvents, Authorization, Events, Actions, Helpers, TokenTypes, Tools } from 'discord-slim';
+import { Client, ClientEvents, Authorization, Events, Actions, Helpers, Tools } from 'discord-slim';
 import { HttpsGet, ReadIncomingData } from './misc.js';
 import config from './config.js';
 
@@ -121,8 +121,7 @@ const SetMarks = async (serverEmojis) => {
         if(!message) continue;
         for(const mark of msg.marks) {
             if(message.reactions.find((elem) => elem.emoji.id == mark.emoji)) continue;
-            const emoji = emojiMap.get(mark.emoji);
-            await Actions.Reaction.Add(message.channel_id, message.id, `${emoji.name}:${emoji.id}`);
+            await Actions.Reaction.Add(message.channel_id, message.id, Tools.Format.Reaction(emojiMap.get(mark.emoji)));
         }
     }
 };
@@ -540,7 +539,7 @@ const VerifyUser = async (code, xgmid) => {
         return { code: 400 };
     }
 
-    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, TokenTypes.BEARER) }).catch(Logger.Warn);
+    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, Helpers.TokenTypes.BEARER) }).catch(Logger.Warn);
     if(!user) {
         Logger.Warn('Verify: user request failed.');
         return { code: 500 };
