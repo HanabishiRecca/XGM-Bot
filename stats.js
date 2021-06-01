@@ -38,10 +38,11 @@ import config from './config.js';
 
     let description = '';
 
-    if(stats) {
+    if(stats?.length) {
+        const maxl = String(stats[0].count).length;
         let index = 1;
         for(const stat of stats)
-            description += `${index++}. ${Tools.Mentions.User(stat.user)} → ${stat.count}\n`;
+            description += `\`${String(index++).padStart(2, ' ')}. ${String(stat.count).padEnd(maxl, ' ')} \`${Tools.Mentions.User(stat.user)}\n`;
     }
 
     await Actions.Message.Edit(config.stats.channel, config.stats.message, {
