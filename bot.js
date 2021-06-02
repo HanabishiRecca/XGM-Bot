@@ -14,8 +14,6 @@ process.on('unhandledRejection', Shutdown);
 !process.env.TOKEN && Shutdown('Token required.');
 !process.env.STORAGE && Shutdown('Storage path required.');
 
-global.gc && setInterval(global.gc, 3600000);
-
 import Database from 'nedb-promise';
 import MariaDB from 'mariadb';
 import { Client, ClientEvents, Authorization, Events, Actions, Helpers, Tools } from 'discord-slim';
@@ -211,6 +209,8 @@ const SyncUsers = async () => {
     } catch(e) {
         Logger.Error(e);
     }
+
+    global.gc?.();
 };
 
 setInterval(SyncUsers, 3600000);
