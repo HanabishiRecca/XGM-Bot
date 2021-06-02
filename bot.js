@@ -320,13 +320,13 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     const options = data.options;
     if(!options) return;
 
-    const _id = options[0]?.value?.toString?.();
+    const _id = options[0]?.value;
     if(!_id) return;
 
     const embeds = [];
 
     try {
-        const target = await Actions.User.Get(_id);
+        const target = await Actions.User.Get(String(_id));
         embeds.push({
             title: `${target.username}\`#${target.discriminator}\``,
             thumbnail: { url: Tools.CdnImages.UserAvatar(target) },
@@ -635,7 +635,7 @@ const webApiFuncs = {
         Logger.Log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
         usersDb.nedb.persistence.compactDatafile();
-        SendLogMsg(`Отвязка аккаунта ${Tools.Mentions.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data.toString()}` : ''));
+        SendLogMsg(`Отвязка аккаунта ${Tools.Mentions.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             Actions.Member.RemoveRole(config.server, userInfo._id, config.role.user);
@@ -686,7 +686,7 @@ const webApiFuncs = {
         if(!data)
             return response.statusCode = 400;
 
-        const text = data.toString();
+        const text = String(data);
         SendPM(userInfo._id, (text.length > 2000) ? text.substring(0, 1999) : text);
 
         response.statusCode = 200;
@@ -705,7 +705,7 @@ const webApiFuncs = {
         if(!data)
             return response.statusCode = 400;
 
-        const text = data.toString();
+        const text = String(data);
         try {
             await SendMessage(channelid, (text.length > 2000) ? text.substring(0, 1999) : text);
             response.statusCode = 200;
