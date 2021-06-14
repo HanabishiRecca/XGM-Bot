@@ -30,6 +30,8 @@ import config from './config.js';
         user: process.env.MDB_USER,
         password: process.env.MDB_PASSWORD,
         bigNumberStrings: true,
+        connectTimeout: 1000,
+        socketTimeout: 1000,
     });
 
     const stats = await connection.query('select user,count(id) as count from messages where (dt > (NOW() - INTERVAL 7 DAY)) group by user order by count desc limit 20;');

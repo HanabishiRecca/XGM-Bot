@@ -28,6 +28,7 @@ const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE &
     user: process.env.MDB_USER,
     password: process.env.MDB_PASSWORD,
     bigNumberStrings: true,
+    connectTimeout: 1000,
 } : undefined;
 
 let mdbConnection;
