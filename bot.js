@@ -209,11 +209,14 @@ const SyncUsers = async () => {
     } catch(e) {
         Logger.Error(e);
     }
+};
 
+const RunSync = async () => {
+    await SyncUsers().catch(Logger.Error);
     global.gc?.();
 };
 
-setInterval(SyncUsers, 3600000);
+setInterval(RunSync, 3600000);
 
 const CheckBan = async (data, flag) => {
     if(!((data.guild_id == config.server) && data.user)) return;
@@ -487,7 +490,7 @@ client.events.on(Events.GUILD_MEMBERS_CHUNK, async (chunk) => {
     if(!firstUsersSync || (server.id != config.server) || (chunk.chunk_index < chunk.chunk_count - 1)) return;
 
     firstUsersSync = false;
-    SyncUsers();
+    RunSync();
 });
 
 const SetRoleData = async (data) =>
