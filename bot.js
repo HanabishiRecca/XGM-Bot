@@ -319,12 +319,16 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
 
     Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
 
-    if(data.name != 'who') return;
+    let _id, showPublic;
+    if(data.name == 'who') {
+        const options = data.options;
+        if(!options) return;
+        _id = options[0]?.value;
+        showPublic = options[1]?.value;
+    } else if(data.name == 'who_user') {
+        _id = data.target_id;
+    }
 
-    const options = data.options;
-    if(!options) return;
-
-    const _id = options[0]?.value;
     if(!_id) return;
 
     const embeds = [];
@@ -391,10 +395,10 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     }
 
     Actions.Application.CreateInteractionResponse(interaction.id, interaction.token, {
-        type: Helpers.InteractionResponseTypes.CHANNEL_MESSAGE_WITH_SOURCE,
+        type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
             embeds,
-            flags: options[1]?.value ? 0 : Helpers.InteractionResponseFlags.EPHEMERAL,
+            flags: showPublic ? 0 : Helpers.InteractionCallbackDataFlags.EPHEMERAL,
         },
     }).catch(Logger.Error);
 });
