@@ -511,11 +511,6 @@ client.events.on(Events.GUILD_BAN_ADD, (data) => CheckBan(data, true));
 
 client.events.on(Events.GUILD_BAN_REMOVE, (data) => CheckBan(data, false));
 
-client.events.on(Events.VOICE_STATE_UPDATE, (data) => {
-    if(data.guild_id != config.server) return;
-    RoleSwitch(data.member, config.role.voice, Boolean(data.channel_id));
-});
-
 client.Connect(authorization, 0
     | Helpers.Intents.GUILDS
     | Helpers.Intents.GUILD_MEMBERS
@@ -523,7 +518,6 @@ client.Connect(authorization, 0
     | Helpers.Intents.GUILD_MESSAGES
     | Helpers.Intents.GUILD_MESSAGE_REACTIONS
     | Helpers.Intents.DIRECT_MESSAGES
-    | Helpers.Intents.GUILD_VOICE_STATES
 );
 
 const
