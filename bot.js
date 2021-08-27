@@ -239,18 +239,19 @@ const LoadMessage = async (message) => {
     return results?.[0];
 };
 
-const GenRolesMap = (roles) => {
+const GenMap = (objs) => {
     const map = new Map();
-    for(const role of roles)
-        map.set(role.id, role);
+    for(const obj of objs)
+        map.set(obj.id, obj);
     return map;
 };
 
 const AddServer = (server) =>
     ConnectedServers.set(server.id, {
         id: server.id,
-        roles: GenRolesMap(server.roles),
+        roles: GenMap(server.roles),
         members: new Map(),
+        channels: GenMap(server.channels),
     });
 
 const WH_LOG_ID = process.env.WH_LOG_ID, WH_LOG_TOKEN = process.env.WH_LOG_TOKEN;
@@ -404,11 +405,13 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
 });
 
 client.events.on(Events.MESSAGE_CREATE, async (message) => {
-    if((message.guild_id != config.server)
-        || !message.author
-        || message.author.bot
-    ) return;
-    SaveMessage(message);
+    if(message.guild_id != config.server) return;
+
+    message.author && !message.author.bot && SaveMessage(message);
+
+    const channel = ConnectedServers.get(message.guild_id)?.channels.get(message.channel_id);
+    if(channel?.type == Helpers.ChannelTypes.GUILD_NEWS)
+        Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
 });
 
 client.events.on(Events.MESSAGE_UPDATE, async (message) => {
@@ -478,7 +481,8 @@ client.events.on(Events.GUILD_CREATE, async (server) => {
 client.events.on(Events.GUILD_UPDATE, async (update) => {
     const server = ConnectedServers.get(update.id);
     if(!server) return;
-    server.roles = GenRolesMap(update.roles);
+    server.roles = GenMap(update.roles);
+    server.channels = GenMap(update.channels);
 });
 
 client.events.on(Events.GUILD_DELETE, async (deleted) =>
@@ -498,18 +502,27 @@ client.events.on(Events.GUILD_MEMBERS_CHUNK, async (chunk) => {
     RunSync();
 });
 
-const SetRoleData = async (data) =>
+const SetRoleData = (data) =>
     ConnectedServers.get(data.guild_id)?.roles.set(data.role.id, data.role);
 
 client.events.on(Events.GUILD_ROLE_CREATE, SetRoleData);
 client.events.on(Events.GUILD_ROLE_UPDATE, SetRoleData);
 
-client.events.on(Events.GUILD_ROLE_DELETE, async (data) =>
+client.events.on(Events.GUILD_ROLE_DELETE, (data) =>
     ConnectedServers.get(data.guild_id)?.roles.delete(data.role_id));
 
 client.events.on(Events.GUILD_BAN_ADD, (data) => CheckBan(data, true));
 
 client.events.on(Events.GUILD_BAN_REMOVE, (data) => CheckBan(data, false));
+
+const SetChannelData = async (channel) =>
+    ConnectedServers.get(channel.guild_id)?.channels.set(channel.id, channel);
+
+client.events.on(Events.CHANNEL_CREATE, SetChannelData);
+client.events.on(Events.CHANNEL_UPDATE, SetChannelData);
+
+client.events.on(Events.CHANNEL_DELETE, (channel) =>
+    ConnectedServers.get(channel.guild_id)?.channels.delete(channel.id));
 
 client.Connect(authorization, 0
     | Helpers.Intents.GUILDS
@@ -517,7 +530,6 @@ client.Connect(authorization, 0
     | Helpers.Intents.GUILD_BANS
     | Helpers.Intents.GUILD_MESSAGES
     | Helpers.Intents.GUILD_MESSAGE_REACTIONS
-    | Helpers.Intents.DIRECT_MESSAGES
 );
 
 const
