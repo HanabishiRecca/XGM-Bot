@@ -66,7 +66,8 @@ Actions.setDefaultRequestOptions({
     authorization,
     rateLimit: {
         retryCount: 3,
-        callback: (response, attempts) => Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
+        callback: (response, attempts) =>
+            Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
     },
 });
 
@@ -98,7 +99,7 @@ const MarkMessages = (() => {
     return msgs;
 })();
 
-const ReactionProc = async (reaction, add) => {
+const ReactionProc = (reaction, add) => {
     const msg = MarkMessages.get(reaction.message_id);
     if(!msg) return;
     const mark = msg.marks.find((elem) => elem.emoji == reaction.emoji.id);
@@ -106,24 +107,26 @@ const ReactionProc = async (reaction, add) => {
     (add ? Actions.Member.AddRole : Actions.Member.RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
 };
 
-let marksSynced = false;
-const SetMarks = async (serverEmojis) => {
-    if(marksSynced) return;
-    marksSynced = true;
+const SetMarks = (() => {
+    let marksSynced = false;
+    return async (serverEmojis) => {
+        if(marksSynced) return;
+        marksSynced = true;
 
-    const emojiMap = new Map();
-    for(const emoji of serverEmojis)
-        emojiMap.set(emoji.id, emoji);
+        const emojiMap = new Map();
+        for(const emoji of serverEmojis)
+            emojiMap.set(emoji.id, emoji);
 
-    for(const msg of MarkMessages.values()) {
-        const message = await Actions.Message.Get(msg.channel, msg.id);
-        if(!message) continue;
-        for(const mark of msg.marks) {
-            if(message.reactions.find((elem) => elem.emoji.id == mark.emoji)) continue;
-            await Actions.Reaction.Add(message.channel_id, message.id, Tools.Format.Reaction(emojiMap.get(mark.emoji)));
+        for(const msg of MarkMessages.values()) {
+            const message = await Actions.Message.Get(msg.channel, msg.id);
+            if(!message) continue;
+            for(const mark of msg.marks) {
+                if(message.reactions.find((elem) => elem.emoji.id == mark.emoji)) continue;
+                await Actions.Reaction.Add(message.channel_id, message.id, Tools.Format.Reaction(emojiMap.get(mark.emoji)));
+            }
         }
-    }
-};
+    };
+})();
 
 const ConnectedServers = new Map();
 
@@ -230,7 +233,17 @@ const CheckBan = async (data, flag) => {
 
 const SaveMessage = async (message) => {
     if(!mdbConnection) return;
-    await mdbConnection.query({ namedPlaceholders: true, sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;' }, { id: message.id, user: message.author.id, text: message.content || null }).catch(Logger.Error);
+    await mdbConnection.query(
+        {
+            namedPlaceholders: true,
+            sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;',
+        },
+        {
+            id: message.id,
+            user: message.author.id,
+            text: message.content || null,
+        }
+    ).catch(Logger.Error);
 };
 
 const LoadMessage = async (message) => {
@@ -303,7 +316,7 @@ const SendDiffMsg = (title, data, message, link) => {
     Actions.Webhook.Execute(WH_MSGLOG_ID, WH_MSGLOG_TOKEN, { embeds: [embed] }).catch(Logger.Error);
 };
 
-client.events.on(Events.READY, async (data) => {
+client.events.on(Events.READY, (data) => {
     ConnectedServers.clear();
 
     for(const server of data.guilds)
@@ -404,7 +417,7 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     }).catch(Logger.Error);
 });
 
-client.events.on(Events.MESSAGE_CREATE, async (message) => {
+client.events.on(Events.MESSAGE_CREATE, (message) => {
     if(message.guild_id != config.server) return;
 
     message.author && !message.author.bot && SaveMessage(message);
@@ -442,11 +455,11 @@ client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
     userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
 });
 
-client.events.on(Events.GUILD_MEMBER_UPDATE, async (member) => {
+client.events.on(Events.GUILD_MEMBER_UPDATE, (member) => {
     ConnectedServers.get(member.guild_id)?.members.set(member.user.id, member);
 });
 
-client.events.on(Events.GUILD_MEMBER_REMOVE, async (member) => {
+client.events.on(Events.GUILD_MEMBER_REMOVE, (member) => {
     ConnectedServers.get(member.guild_id)?.members.delete(member.user.id);
 
     if(member.guild_id != config.server) return;
@@ -454,17 +467,17 @@ client.events.on(Events.GUILD_MEMBER_REMOVE, async (member) => {
     SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mentions.User(member.user.id)} покинул сервер.`);
 });
 
-client.events.on(Events.MESSAGE_REACTION_ADD, async (reaction) => {
+client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) => {
     if((reaction.guild_id != config.server) || (client.user.id == reaction.user_id)) return;
     ReactionProc(reaction, true);
 });
 
-client.events.on(Events.MESSAGE_REACTION_REMOVE, async (reaction) => {
+client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) => {
     if((reaction.guild_id != config.server) || (client.user.id == reaction.user_id)) return;
     ReactionProc(reaction, false);
 });
 
-client.events.on(Events.GUILD_CREATE, async (server) => {
+client.events.on(Events.GUILD_CREATE, (server) => {
     AddServer(server);
 
     client.RequestGuildMembers({
@@ -478,29 +491,31 @@ client.events.on(Events.GUILD_CREATE, async (server) => {
     SetMarks(server.emojis);
 });
 
-client.events.on(Events.GUILD_UPDATE, async (update) => {
+client.events.on(Events.GUILD_UPDATE, (update) => {
     const server = ConnectedServers.get(update.id);
     if(!server) return;
     server.roles = GenMap(update.roles);
     server.channels = GenMap(update.channels);
 });
 
-client.events.on(Events.GUILD_DELETE, async (deleted) =>
+client.events.on(Events.GUILD_DELETE, (deleted) =>
     !deleted.unavailable && ConnectedServers.delete(deleted.id));
 
-let firstUsersSync = true;
-client.events.on(Events.GUILD_MEMBERS_CHUNK, async (chunk) => {
-    const server = ConnectedServers.get(chunk.guild_id);
-    if(!server) return;
+client.events.on(Events.GUILD_MEMBERS_CHUNK, (() => {
+    let usersSynced = false;
+    return (chunk) => {
+        const server = ConnectedServers.get(chunk.guild_id);
+        if(!server) return;
 
-    for(const member of chunk.members)
-        server.members.set(member.user.id, member);
+        for(const member of chunk.members)
+            server.members.set(member.user.id, member);
 
-    if(!firstUsersSync || (server.id != config.server) || (chunk.chunk_index < chunk.chunk_count - 1)) return;
+        if(usersSynced || (server.id != config.server) || (chunk.chunk_index < chunk.chunk_count - 1)) return;
 
-    firstUsersSync = false;
-    RunSync();
-});
+        usersSynced = true;
+        RunSync();
+    };
+})());
 
 const SetRoleData = (data) =>
     ConnectedServers.get(data.guild_id)?.roles.set(data.role.id, data.role);
@@ -515,7 +530,7 @@ client.events.on(Events.GUILD_BAN_ADD, (data) => CheckBan(data, true));
 
 client.events.on(Events.GUILD_BAN_REMOVE, (data) => CheckBan(data, false));
 
-const SetChannelData = async (channel) =>
+const SetChannelData = (channel) =>
     ConnectedServers.get(channel.guild_id)?.channels.set(channel.id, channel);
 
 client.events.on(Events.CHANNEL_CREATE, SetChannelData);
