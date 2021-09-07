@@ -252,10 +252,11 @@ const LoadMessage = async (message) => {
     return results?.[0];
 };
 
-const GenMap = (objs) => {
+const GenMap = (arr) => {
     const map = new Map();
-    for(const obj of objs)
-        map.set(obj.id, obj);
+    if(Array.isArray(arr))
+        for(const elem of arr)
+            map.set(elem.id, elem);
     return map;
 };
 
