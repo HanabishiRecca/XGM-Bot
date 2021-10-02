@@ -285,12 +285,12 @@ const SendDiffMsg = (title, data, message, link) => {
         fields: [
             {
                 name: 'Автор',
-                value: Tools.Mentions.User(data.user),
+                value: Tools.Mention.User(data.user),
                 inline: true,
             },
             {
                 name: 'Канал',
-                value: Tools.Mentions.Channel(message.channel_id),
+                value: Tools.Mention.Channel(message.channel_id),
                 inline: true,
             },
         ],
@@ -352,7 +352,7 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
         const target = await Actions.User.Get(String(_id));
         embeds.push({
             title: `${target.username}\`#${target.discriminator}\``,
-            thumbnail: { url: Tools.CdnImages.UserAvatar(target) },
+            thumbnail: { url: Tools.Resource.UserAvatar(target) },
             color: 16764928,
         });
     } catch(e) {
@@ -450,7 +450,7 @@ client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
 
     if(member.guild_id != config.server) return;
 
-    SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mentions.User(member.user.id)} присоединился к серверу.`);
+    SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mention.User(member.user.id)} присоединился к серверу.`);
 
     const userInfo = await usersDb.findOne({ _id: member.user.id });
     userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
@@ -465,7 +465,7 @@ client.events.on(Events.GUILD_MEMBER_REMOVE, (member) => {
 
     if(member.guild_id != config.server) return;
 
-    SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mentions.User(member.user.id)} покинул сервер.`);
+    SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mention.User(member.user.id)} покинул сервер.`);
 });
 
 client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) => {
@@ -587,7 +587,7 @@ const VerifyUser = async (code, xgmid) => {
         } else {
             await usersDb.update({ _id: user.id }, { xgmid });
             usersDb.nedb.persistence.compactDatafile();
-            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mentions.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
+            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
             SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
             retCode = 200;
         }
@@ -608,8 +608,8 @@ const VerifyUser = async (code, xgmid) => {
         usersDb.nedb.persistence.compactDatafile();
 
         SendLogMsg(clone ?
-            `Перепривязка аккаунта Discord ${Tools.Mentions.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mentions.User(clone._id)}` :
-            `Привязка аккаунта ${Tools.Mentions.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}`
+            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(clone._id)}` :
+            `Привязка аккаунта ${Tools.Mention.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}`
         );
         SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
 
@@ -665,7 +665,7 @@ const webApiFuncs = {
         Logger.Log(`Verify: delete! ${userInfo._id}`);
         await usersDb.remove({ xgmid });
         usersDb.nedb.persistence.compactDatafile();
-        SendLogMsg(`Отвязка аккаунта ${Tools.Mentions.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data}` : ''));
+        SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data}` : ''));
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             Actions.Member.RemoveRole(config.server, userInfo._id, config.role.user);
