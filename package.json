@@ -10,8 +10,8 @@
     "main": "bot.js",
     "type": "module",
     "dependencies": {
-        "discord-slim": "2.2.*",
-        "fast-xml-parser": "3.19.*",
+        "discord-slim": "2.3.*",
+        "fast-xml-parser": "3.20.*",
         "mariadb": "2.5.*",
         "nedb-promise": "2.0.*"
     }
