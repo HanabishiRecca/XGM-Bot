@@ -44,7 +44,7 @@ import config from './config.js';
         const maxl = String(stats[0].count).length;
         let index = 1;
         for(const stat of stats)
-            description += `\`${String(index++).padStart(2, ' ')}. ${String(stat.count).padEnd(maxl, ' ')} \`${Tools.Mentions.User(stat.user)}\n`;
+            description += `\`${String(index++).padStart(2, ' ')}. ${String(stat.count).padEnd(maxl, ' ')} \`${Tools.Mention.User(stat.user)}\n`;
     }
 
     await Actions.Message.Edit(config.stats.channel, config.stats.message, {
