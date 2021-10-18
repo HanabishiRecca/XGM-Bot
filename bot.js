@@ -492,11 +492,15 @@ client.events.on(Events.GUILD_CREATE, (server) => {
     SetMarks(server.emojis);
 });
 
-client.events.on(Events.GUILD_UPDATE, (update) => {
-    const server = ConnectedServers.get(update.id);
+client.events.on(Events.GUILD_UPDATE, ({ id, roles, channels }) => {
+    const server = ConnectedServers.get(id);
     if(!server) return;
-    server.roles = GenMap(update.roles);
-    server.channels = GenMap(update.channels);
+
+    if(roles)
+        server.roles = GenMap(roles);
+
+    if(channels)
+        server.channels = GenMap(channels);
 });
 
 client.events.on(Events.GUILD_DELETE, (deleted) =>
