@@ -319,10 +319,6 @@ const SendDiffMsg = (title, data, message, link) => {
 
 client.events.on(Events.READY, (data) => {
     ConnectedServers.clear();
-
-    for(const server of data.guilds)
-        ConnectedServers.set(server.id, server);
-
     Logger.Log('READY');
 });
 
