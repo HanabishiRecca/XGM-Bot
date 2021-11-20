@@ -10,7 +10,6 @@
     "dependencies": {
         "discord-slim": "2.3.*",
         "fast-xml-parser": "3.21.*",
-        "mariadb": "2.5.*",
         "nedb-promise": "2.0.*"
     }
 }

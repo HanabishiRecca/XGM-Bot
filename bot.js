@@ -15,50 +15,11 @@ process.on('unhandledRejection', Shutdown);
 !process.env.STORAGE && Shutdown('Storage path required.');
 
 import Database from 'nedb-promise';
-import MariaDB from 'mariadb';
 import { Client, ClientEvents, Authorization, Events, Actions, Helpers, Tools } from 'discord-slim';
 import { HttpsGet, ReadIncomingData } from './misc.js';
 import config from './config.js';
 
 const usersDb = Database({ filename: `${process.env.STORAGE}/users.db`, autoload: true });
-
-const mdbConnectionOptions = (process.env.MDB_HOST && process.env.MDB_DATABASE && process.env.MDB_USER && process.env.MDB_PASSWORD) ? {
-    host: process.env.MDB_HOST,
-    database: process.env.MDB_DATABASE,
-    user: process.env.MDB_USER,
-    password: process.env.MDB_PASSWORD,
-    bigNumberStrings: true,
-    connectTimeout: 1000,
-} : undefined;
-
-let mdbConnection;
-
-const MdbConnect = async () => {
-    if(!mdbConnectionOptions) return;
-
-    Logger.Log('Mdb connecting...');
-
-    mdbConnection && mdbConnection.end();
-    mdbConnection = null;
-
-    try {
-        mdbConnection = await MariaDB.createConnection(mdbConnectionOptions);
-    } catch(e) {
-        Logger.Error(e);
-        mdbConnection = null;
-        setTimeout(MdbConnect, 1000);
-        return;
-    }
-
-    Logger.Log('Mdb connected.');
-
-    mdbConnection.on('error', (e) => {
-        Logger.Error(e);
-        e.fatal && MdbConnect();
-    });
-};
-
-MdbConnect();
 
 const authorization = new Authorization(process.env.TOKEN);
 
@@ -231,27 +192,6 @@ const CheckBan = async (data, flag) => {
     SyncUser(data.user.id, userInfo._id, flag);
 };
 
-const SaveMessage = async (message) => {
-    if(!mdbConnection) return;
-    await mdbConnection.query(
-        {
-            namedPlaceholders: true,
-            sql: 'insert into messages (id,user,text) values (:id,:user,:text) on duplicate key update text=:text;',
-        },
-        {
-            id: message.id,
-            user: message.author.id,
-            text: message.content || null,
-        }
-    ).catch(Logger.Error);
-};
-
-const LoadMessage = async (message) => {
-    if(!mdbConnection) return;
-    const results = await mdbConnection.query('select user,dt,text from messages where (id=?) limit 1;', [message.id]).catch(Logger.Error);
-    return results?.[0];
-};
-
 const GenMap = (arr) => {
     const map = new Map();
     if(Array.isArray(arr))
@@ -417,28 +357,9 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
 client.events.on(Events.MESSAGE_CREATE, (message) => {
     if(message.guild_id != config.server) return;
 
-    message.author && !message.author.bot && SaveMessage(message);
-
     const channel = ConnectedServers.get(message.guild_id)?.channels.get(message.channel_id);
     if(channel?.type == Helpers.ChannelTypes.GUILD_NEWS)
         Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
-});
-
-client.events.on(Events.MESSAGE_UPDATE, async (message) => {
-    if((message.guild_id != config.server)
-        || !message.content
-        || !message.author
-        || message.author.bot
-    ) return;
-    const data = await LoadMessage(message);
-    SaveMessage(message);
-    data && SendDiffMsg('Сообщение изменено', data, message, true);
-});
-
-client.events.on(Events.MESSAGE_DELETE, async (message) => {
-    if(message.guild_id != config.server) return;
-    const data = await LoadMessage(message);
-    data && SendDiffMsg('Сообщение удалено', data, message, false);
 });
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
