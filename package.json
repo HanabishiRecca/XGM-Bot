@@ -1,8 +1,6 @@
 {
-    "name": "xgmbot",
-    "version": "1.0.0",
-    "author": "Hanabishi",
     "description": "XGM Bot",
+    "author": "Hanabishi",
     "homepage": "https://xgm.guru",
     "discord": "https://discord.gg/vdS2kgr",
     "repository": "https://github.com/HanabishiRecca/XGM-Bot",
@@ -11,7 +9,7 @@
     "type": "module",
     "dependencies": {
         "discord-slim": "2.3.*",
-        "fast-xml-parser": "3.20.*",
+        "fast-xml-parser": "3.21.*",
         "mariadb": "2.5.*",
         "nedb-promise": "2.0.*"
     }
