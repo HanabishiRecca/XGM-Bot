@@ -118,7 +118,7 @@ const SyncUser = async (userid, xgmid, banned) => {
 
     const
         status = response.state?.access?.staff_status,
-        member = ConnectedServers.get(config.server).members.get(userid);
+        member = ConnectedServers.get(config.server)?.members?.get(userid);
 
     if(status == 'suspended') {
         if(member || !banned)
@@ -140,6 +140,9 @@ const SyncUser = async (userid, xgmid, banned) => {
 };
 
 const SyncUsers = async () => {
+    const members = ConnectedServers.get(config.server)?.members;
+    if(!members) return;
+
     const
         bans = await Actions.Guild.GetBans(config.server),
         banned = new Set();
@@ -158,9 +161,6 @@ const SyncUsers = async () => {
     const xgms = new Set();
     for(const userInfo of users)
         xgms.add(userInfo._id);
-
-    const members = ConnectedServers.get(config.server)?.members;
-    if(!members) return;
 
     try {
         for(const member of members.values())
