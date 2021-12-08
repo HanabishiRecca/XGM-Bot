@@ -8,7 +8,7 @@
     "main": "bot.js",
     "type": "module",
     "dependencies": {
-        "discord-slim": "2.3.*",
+        "discord-slim": "2.4.*",
         "fast-xml-parser": "3.21.*",
         "nedb-promise": "2.0.*"
     }
