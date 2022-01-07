@@ -9,7 +9,7 @@
     "type": "module",
     "dependencies": {
         "discord-slim": "2.4.*",
-        "fast-xml-parser": "3.21.*",
+        "fast-xml-parser": "4.0.*",
         "nedb-promise": "2.0.*"
     }
 }

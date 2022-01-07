@@ -18,7 +18,7 @@ const WH_NEWS_ID = process.env.WH_NEWS_ID, WH_NEWS_TOKEN = process.env.WH_NEWS_T
 !process.env.STORAGE && Shutdown('Storage path required.');
 
 import Database from 'nedb-promise';
-import XmlParser from 'fast-xml-parser';
+import { XMLParser } from 'fast-xml-parser';
 import { Actions } from 'discord-slim';
 import { HttpsGet, DecodeHtmlEntity } from './misc.js';
 
@@ -30,7 +30,7 @@ const lastNewsTime = { _id: 'lastNewsTime' };
     const data = await HttpsGet('https://xgm.guru/rss');
     if(!data?.length) Shutdown('No data received.');
 
-    const items = XmlParser.parse(data.toString(), { ignoreAttributes: false, attributeNamePrefix: '' })?.rss?.channel?.item;
+    const items = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' }).parse(data)?.rss?.channel?.item;
     if(!items?.length) Shutdown('Incorrect data received.');
 
     const
