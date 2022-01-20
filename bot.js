@@ -358,8 +358,16 @@ client.events.on(Events.MESSAGE_CREATE, (message) => {
     if(message.guild_id != config.server) return;
 
     const channel = ConnectedServers.get(message.guild_id)?.channels.get(message.channel_id);
-    if(channel?.type == Helpers.ChannelTypes.GUILD_NEWS)
-        Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
+    if(channel?.type != Helpers.ChannelTypes.GUILD_NEWS) return;
+
+    Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
+
+    const title = message.embeds?.[0]?.title;
+    if(typeof title != 'string') return;
+
+    Actions.Thread.StartWithMessage(message.channel_id, message.id, {
+        name: title.replace(/[\/\\]/g, '|'),
+    }).catch(Logger.Warn);
 });
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
