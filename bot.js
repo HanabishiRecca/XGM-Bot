@@ -215,48 +215,6 @@ const SendLogMsg = (content) => {
     Actions.Webhook.Execute(WH_LOG_ID, WH_LOG_TOKEN, { content }).catch(Logger.Error);
 };
 
-const WH_MSGLOG_ID = process.env.WH_MSGLOG_ID, WH_MSGLOG_TOKEN = process.env.WH_MSGLOG_TOKEN;
-
-const SendDiffMsg = (title, data, message, link) => {
-    if(!(WH_MSGLOG_ID && WH_MSGLOG_TOKEN)) return;
-
-    const embed = {
-        title,
-        fields: [
-            {
-                name: 'Автор',
-                value: Tools.Mention.User(data.user),
-                inline: true,
-            },
-            {
-                name: 'Канал',
-                value: Tools.Mention.Channel(message.channel_id),
-                inline: true,
-            },
-        ],
-        timestamp: new Date(data.dt).toISOString(),
-    };
-
-    link && embed.fields.push({
-        name: 'Переход',
-        value: Tools.Link.Message(message),
-        inline: false,
-    });
-
-    const text = data.text;
-    if(text) {
-        let n = 1;
-        for(let i = 0; i < text.length; i += 1024)
-            embed.fields.push({
-                name: `Содержимое (${n++})`,
-                value: text.substr(i, 1024),
-                inline: false,
-            });
-    }
-
-    Actions.Webhook.Execute(WH_MSGLOG_ID, WH_MSGLOG_TOKEN, { embeds: [embed] }).catch(Logger.Error);
-};
-
 client.events.on(Events.READY, (data) => {
     ConnectedServers.clear();
     Logger.Log('READY');
