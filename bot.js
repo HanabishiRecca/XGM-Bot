@@ -312,18 +312,18 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     }).catch(Logger.Error);
 });
 
-client.events.on(Events.MESSAGE_CREATE, (message) => {
+client.events.on(Events.MESSAGE_CREATE, async (message) => {
     if(message.guild_id != config.server) return;
 
     const channel = ConnectedServers.get(message.guild_id)?.channels.get(message.channel_id);
     if(channel?.type != Helpers.ChannelTypes.GUILD_NEWS) return;
 
-    Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
+    await Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
 
     const title = message.embeds?.[0]?.title;
     if(typeof title != 'string') return;
 
-    Actions.Thread.StartWithMessage(message.channel_id, message.id, {
+    await Actions.Thread.StartWithMessage(message.channel_id, message.id, {
         name: title.replace(/[\/\\]/g, '|'),
     }).catch(Logger.Warn);
 });
