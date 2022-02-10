@@ -41,14 +41,13 @@ client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
 const
-    SendMessage = (channel_id, content, embed) => Actions.Message.Create(channel_id, { content, embed }),
     HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
     InProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active')),
     XgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`;
 
-const SendPM = async (user_id, content) => {
-    const channel = await Actions.User.CreateDM({ recipient_id: user_id });
-    return SendMessage(channel.id, content).catch(Logger.Warn);
+const SendPM = async (recipient_id, content) => {
+    const channel = await Actions.User.CreateDM({ recipient_id });
+    return Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
 };
 
 const MarkMessages = (() => {
@@ -122,7 +121,7 @@ const SyncUser = async (userid, xgmid, banned) => {
 
     if(status == 'suspended') {
         if(member || !banned)
-            await Actions.Ban.Add(config.server, userid, { reason: 'Бан на сайте' });
+            await Actions.Ban.Add(config.server, userid);
         return;
     }
 
@@ -307,7 +306,7 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
         type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
             embeds,
-            flags: showPublic ? 0 : Helpers.InteractionCallbackDataFlags.EPHEMERAL,
+            flags: showPublic ? Helpers.MessageFlags.NO_FLAGS : Helpers.MessageFlags.EPHEMERAL,
         },
     }).catch(Logger.Error);
 });
@@ -427,7 +426,7 @@ client.events.on(Events.CHANNEL_UPDATE, SetChannelData);
 client.events.on(Events.CHANNEL_DELETE, (channel) =>
     ConnectedServers.get(channel.guild_id)?.channels.delete(channel.id));
 
-client.Connect(authorization, 0
+client.Connect(authorization, Helpers.Intents.SYSTEM
     | Helpers.Intents.GUILDS
     | Helpers.Intents.GUILD_MEMBERS
     | Helpers.Intents.GUILD_BANS
@@ -436,6 +435,7 @@ client.Connect(authorization, 0
 );
 
 const
+    MESSAGE_MAX_CHARS = 2000,
     AUTH_SVC = process.env.AUTH_SVC,
     CLIENT_ID = process.env.CLIENT_ID,
     CLIENT_SECRET = process.env.CLIENT_SECRET,
@@ -511,11 +511,8 @@ const VerifyUser = async (code, xgmid) => {
 const WH_SYSLOG_ID = process.env.WH_SYSLOG_ID, WH_SYSLOG_TOKEN = process.env.WH_SYSLOG_TOKEN;
 
 const SendSysLogMsg = async (content) => {
-    if(!(WH_SYSLOG_ID && WH_SYSLOG_TOKEN)) return;
-    if(!content) return;
-
-    for(let i = 0; i < content.length; i += 2000)
-        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substr(i, 2000) }).catch(Logger.Error);
+    for(let i = 0; i < content.length; i += MESSAGE_MAX_CHARS)
+        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substring(i, i + MESSAGE_MAX_CHARS) }).catch(Logger.Error);
 };
 
 const webApiFuncs = {
@@ -603,8 +600,7 @@ const webApiFuncs = {
         if(!data)
             return response.statusCode = 400;
 
-        const text = String(data);
-        SendPM(userInfo._id, (text.length > 2000) ? text.substring(0, 1999) : text);
+        SendPM(userInfo._id, String(data).substring(0, MESSAGE_MAX_CHARS));
 
         response.statusCode = 200;
     },
@@ -622,9 +618,8 @@ const webApiFuncs = {
         if(!data)
             return response.statusCode = 400;
 
-        const text = String(data);
         try {
-            await SendMessage(channelid, (text.length > 2000) ? text.substring(0, 1999) : text);
+            await Actions.Message.Create(channelid, { content: String(data).substring(0, MESSAGE_MAX_CHARS) });
             response.statusCode = 200;
         } catch(e) {
             Logger.Warn(e);
