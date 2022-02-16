@@ -41,6 +41,7 @@ client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
 const
+    GetUserCreationDate = (user_id) => Number(BigInt(user_id) >> 22n) + 1420070400000,
     HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
     InProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active')),
     XgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`;
@@ -247,6 +248,12 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
             title: `${target.username}\`#${target.discriminator}\``,
             thumbnail: { url: Tools.Resource.UserAvatar(target) },
             color: 16764928,
+            fields: [
+                {
+                    name: 'Дата создания',
+                    value: Tools.Format.Timestamp(Math.trunc(GetUserCreationDate(target.id) / 1000), Helpers.TimestampStyles.SHORT_DATE_TIME),
+                }
+            ],
         });
     } catch(e) {
         embeds.push({
