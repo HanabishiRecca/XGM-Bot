@@ -6,7 +6,7 @@ export const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
     const chunks = [];
     let dataLen = 0;
 
-    incoming.on('data', chunk => {
+    incoming.on('data', (chunk) => {
         chunks.push(chunk);
         dataLen += chunk.length;
     });
@@ -26,8 +26,8 @@ export const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
 });
 
 export const HttpsGet = (url) => new Promise((resolve, reject) => {
-    https.get(url, response => {
-        if(response.statusCode != 200) return resolve(null);
+    https.get(url, (response) => {
+        if(response.statusCode != 200) return reject(response);
         ReadIncomingData(response).then(resolve).catch(reject);
     });
 });

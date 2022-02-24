@@ -50,7 +50,7 @@ const requestOptions = {
 };
 
 (async () => {
-    const data = await HttpsGet('https://xgm.guru/rss');
+    const data = await HttpsGet('https://xgm.guru/rss').catch(Shutdown);
     if(!data?.length) Shutdown('No data received.');
 
     const items = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' }).parse(data)?.rss?.channel?.item;
@@ -74,7 +74,7 @@ const requestOptions = {
         if(time > lastTime) {
             const embed = {
                 title: DecodeHtmlEntity(item.title),
-                description: DecodeHtmlEntity(item.description.replace(/<\/?[^<>]*>/gm, '')),
+                description: CleanupHtml(DecodeHtmlEntity(item.description)),
                 url: item.link,
                 footer: { text: item.author },
                 timestamp: dt.toISOString(),
