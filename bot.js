@@ -588,9 +588,13 @@ const webApiFuncs = {
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        (async () => {
-            SyncUser(userInfo._id, xgmid, await Actions.Ban.Get(config.server, userInfo._id).catch(Logger.Warn));
-        })();
+        setImmediate(async () => SyncUser(
+            userInfo._id,
+            xgmid,
+            await Actions.Ban.Get(config.server, userInfo._id).
+                then(() => true).
+                catch((e) => ((e.code == 404) || Logger.Error(e), false)),
+        ));
 
         response.statusCode = 200;
     },
