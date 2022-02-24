@@ -21,7 +21,20 @@ const WH_NEWS_ID = process.env.WH_NEWS_ID, WH_NEWS_TOKEN = process.env.WH_NEWS_T
 import Database from 'nedb-promise';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions } from 'discord-slim';
-import { HttpsGet, DecodeHtmlEntity } from './misc.js';
+import { HttpsGet } from './misc.js';
+
+const DecodeHtmlEntity = (() => {
+    const
+        htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' },
+        decodeEntity = (_, dec) => htmlEntities[dec],
+        decodeSymbol = (_, dec) => String.fromCodePoint(dec),
+        re = /&(nbsp|amp|quot|lt|gt);/g,
+        rc = /&#(\d+);/g;
+
+    return (str) => str.replace(re, decodeEntity).replace(rc, decodeSymbol);
+})();
+
+const CleanupHtml = (str) => str.replace(/<\/?[^<>]*>/gm, '');
 
 const appDb = Database({ filename: `${process.env.STORAGE}/app.db`, autoload: true });
 

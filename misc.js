@@ -2,9 +2,6 @@
 
 import https from 'https';
 
-const htmlEntities = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' };
-export const DecodeHtmlEntity = (str) => str.replace(/&amp;/g, '&').replace(/&(nbsp|amp|quot|lt|gt);/g, (_, dec) => htmlEntities[dec]).replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(dec));
-
 export const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
     const chunks = [];
     let dataLen = 0;
