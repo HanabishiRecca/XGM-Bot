@@ -174,7 +174,8 @@ const SyncUsers = async () => {
             xgms.add(userInfo._id);
 
         for(const member of members.values())
-            !xgms.has(member?.user.id) && ClearUser(member);
+            if(!xgms.has(member?.user.id))
+                await ClearUser(member);
     } catch(e) {
         Logger.Error(e);
     }
