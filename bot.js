@@ -41,15 +41,10 @@ client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
 const
+    GenXgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`,
     GetUserCreationDate = (user_id) => Number(BigInt(user_id) >> 22n) + 1420070400000,
     HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
-    InProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active')),
-    XgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`;
-
-const SendPM = async (recipient_id, content) => {
-    const channel = await Actions.User.CreateDM({ recipient_id });
-    return Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
-};
+    IsInProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active'));
 
 const MarkMessages = (() => {
     const msgs = new Map();
@@ -63,9 +58,12 @@ const MarkMessages = (() => {
 const ReactionProc = (reaction, add) => {
     const msg = MarkMessages.get(reaction.message_id);
     if(!msg) return;
+
     const mark = msg.marks.find((elem) => elem.emoji == reaction.emoji.id);
     if(!mark) return;
-    (add ? Actions.Member.AddRole : Actions.Member.RemoveRole)(reaction.guild_id, reaction.user_id, mark.role);
+
+    (add ? Actions.Member.AddRole : Actions.Member.RemoveRole)
+        (reaction.guild_id, reaction.user_id, mark.role).catch(Logger.Error);
 };
 
 const SetMarks = (() => {
@@ -79,11 +77,12 @@ const SetMarks = (() => {
             emojiMap.set(emoji.id, emoji);
 
         for(const msg of MarkMessages.values()) {
-            const message = await Actions.Message.Get(msg.channel, msg.id);
+            const message = await Actions.Message.Get(msg.channel, msg.id).catch(Logger.Error);
             if(!message) continue;
+
             for(const mark of msg.marks) {
                 if(message.reactions.find((elem) => elem.emoji.id == mark.emoji)) continue;
-                await Actions.Reaction.Add(message.channel_id, message.id, Tools.Format.Reaction(emojiMap.get(mark.emoji)));
+                await Actions.Reaction.Add(message.channel_id, message.id, Tools.Format.Reaction(emojiMap.get(mark.emoji))).catch(Logger.Error);
             }
         }
     };
@@ -92,33 +91,38 @@ const SetMarks = (() => {
 const ConnectedServers = new Map();
 
 const RoleSwitch = async (member, role, enable) => {
-    if(!member || !role) return;
-    if(enable) {
-        if(!HasRole(member, role))
-            await Actions.Member.AddRole(config.server, member.user.id, role);
-    } else {
-        if(HasRole(member, role))
-            await Actions.Member.RemoveRole(config.server, member.user.id, role);
-    }
+    if(!(member && role)) return;
+
+    const f = enable ?
+        (HasRole(member, role) ? null : Actions.Member.AddRole) :
+        (HasRole(member, role) ? Actions.Member.RemoveRole : null);
+
+    await f?.(config.server, member.user.id, role);
 };
 
 const RequestXgmUser = async (xgmid) => {
+    let data;
     try {
-        return JSON.parse(await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`));
+        data = await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`);
     } catch(e) {
-        Logger.Warn(e);
+        if(e.statusCode == 404) {
+            Logger.Warn(`XGM user id not found: ${xgmid}`);
+            return {};
+        }
+        throw e;
     }
+    return JSON.parse(data);
 };
 
 const SyncUser = async (userid, xgmid, banned) => {
     if(userid == client.user.id) return;
 
-    const response = await RequestXgmUser(xgmid);
-    if(!response) return;
+    const { info, state } = await RequestXgmUser(xgmid);
+    if(!(info && state)) return;
 
     const
-        status = response.state?.access?.staff_status,
-        member = ConnectedServers.get(config.server)?.members?.get(userid);
+        status = state.access?.staff_status,
+        member = ConnectedServers.get(config.server)?.members.get(userid);
 
     if(status == 'suspended') {
         if(member || !banned)
@@ -134,62 +138,66 @@ const SyncUser = async (userid, xgmid, banned) => {
 
     await RoleSwitch(member, config.role.readonly, status == 'readonly');
     await RoleSwitch(member, config.role.user, true);
-    await RoleSwitch(member, config.role.staff, InProject(status));
-    await RoleSwitch(member, config.role.team, InProject(response.state?.projects?.['833']?.status));
-    await RoleSwitch(member, config.role.twilight, response.info?.user?.seeTwilight);
+    await RoleSwitch(member, config.role.staff, IsInProject(status));
+    await RoleSwitch(member, config.role.team, IsInProject(state.projects?.['833']?.status));
+    await RoleSwitch(member, config.role.twilight, info.user?.seeTwilight);
+};
+
+const ClearUser = async (member) => {
+    await RoleSwitch(member, config.role.readonly, false);
+    await RoleSwitch(member, config.role.user, false);
+    await RoleSwitch(member, config.role.staff, false);
+    await RoleSwitch(member, config.role.team, false);
+    await RoleSwitch(member, config.role.twilight, false);
 };
 
 const SyncUsers = async () => {
-    const members = ConnectedServers.get(config.server)?.members;
-    if(!members) return;
-
-    const
-        bans = await Actions.Guild.GetBans(config.server),
-        banned = new Set();
-
-    for(const banInfo of bans)
-        banned.add(banInfo.user.id);
-
     const users = await usersDb.find({});
+
     try {
+        const bans = new Set();
+        for(const ban of await Actions.Guild.GetBans(config.server))
+            bans.add(ban.user.id);
+
         for(const userInfo of users)
-            await SyncUser(userInfo._id, userInfo.xgmid, banned.has(userInfo._id));
+            await SyncUser(userInfo._id, userInfo.xgmid, bans.has(userInfo._id));
     } catch(e) {
         Logger.Error(e);
     }
-
-    const xgms = new Set();
-    for(const userInfo of users)
-        xgms.add(userInfo._id);
 
     try {
+        const members = ConnectedServers.get(config.server)?.members;
+        if(!members) return;
+
+        const xgms = new Set();
+        for(const userInfo of users)
+            xgms.add(userInfo._id);
+
         for(const member of members.values())
-            if(member && !xgms.has(member.user.id)) {
-                await RoleSwitch(member, config.role.readonly, false);
-                await RoleSwitch(member, config.role.user, false);
-                await RoleSwitch(member, config.role.staff, false);
-                await RoleSwitch(member, config.role.team, false);
-                await RoleSwitch(member, config.role.twilight, false);
-            }
+            !xgms.has(member?.user.id) && ClearUser(member);
     } catch(e) {
         Logger.Error(e);
     }
 };
 
-const RunSync = async () => {
-    await SyncUsers().catch(Logger.Error);
-    global.gc?.();
-};
+const RunSync = (() => {
+    let syncing = false;
+    return async () => {
+        if(syncing) return;
+        syncing = true;
+
+        await SyncUsers().catch(Logger.Error);
+        global.gc?.();
+
+        syncing = false;
+    };
+})();
 
 setInterval(RunSync, 3600000);
 
-const CheckBan = async (data, flag) => {
-    if(!((data.guild_id == config.server) && data.user)) return;
-
-    const userInfo = await usersDb.findOne({ _id: data.user.id });
-    if(!userInfo) return;
-
-    SyncUser(data.user.id, userInfo._id, flag);
+const CheckUser = async (id, flag) => {
+    const userInfo = await usersDb.findOne({ _id: id });
+    userInfo && SyncUser(id, userInfo.xgmid, flag).catch(Logger.Error);
 };
 
 const GenMap = (arr) => {
@@ -215,67 +223,66 @@ const SendLogMsg = (content) => {
     Actions.Webhook.Execute(WH_LOG_ID, WH_LOG_TOKEN, { content }).catch(Logger.Error);
 };
 
-client.events.on(Events.READY, (data) => {
+client.events.on(Events.READY, () => {
     ConnectedServers.clear();
     Logger.Log('READY');
 });
 
-const GenUserInfoEmbeds = async (_id) => {
+const EMBED_MESSAGE_COLOR = 16764928, EMBED_ERROR_COLOR = 16716876;
+
+const GenUserInfoEmbeds = async (user) => {
     const embeds = [];
 
-    const target = await Actions.User.Get(String(_id)).catch((e) => {
+    if(!user) {
         embeds.push({
-            description: (e.code == 404) ?
-                'Указан несуществующий пользователь.' :
-                'Ошибка запроса к Discord.',
-            color: 16716876,
+            description: 'Указан несуществующий пользователь.',
+            color: EMBED_ERROR_COLOR,
         });
-    });
-
-    if(!target) return embeds;
+        return embeds;
+    }
 
     embeds.push({
-        title: `${target.username}\`#${target.discriminator}\``,
-        thumbnail: { url: Tools.Resource.UserAvatar(target) },
-        color: 16764928,
+        title: `${user.username}\`#${user.discriminator}\``,
+        thumbnail: { url: Tools.Resource.UserAvatar(user) },
+        color: EMBED_MESSAGE_COLOR,
         fields: [
             {
                 name: 'Дата создания',
-                value: Tools.Format.Timestamp(Math.trunc(GetUserCreationDate(target.id) / 1000), Helpers.TimestampStyles.SHORT_DATE_TIME),
+                value: Tools.Format.Timestamp(Math.trunc(GetUserCreationDate(user.id) / 1000), Helpers.TimestampStyles.SHORT_DATE_TIME),
             },
         ],
     });
 
-    const xgmid = (await usersDb.findOne({ _id }))?.xgmid;
+    const xgmid = (await usersDb.findOne({ _id: user.id }))?.xgmid;
     if(!xgmid) {
         embeds.push({
             description: 'Нет привязки к XGM.',
-            color: 16716876,
+            color: EMBED_ERROR_COLOR,
         });
         return embeds;
     }
 
-    const xgmres = await RequestXgmUser(xgmid);
+    const xgmres = await RequestXgmUser(xgmid).catch(Logger.Error);
     if(!xgmres) {
         embeds.push({
             description: 'Ошибка запроса к XGM.',
-            color: 16716876,
+            color: EMBED_ERROR_COLOR,
         });
         return embeds;
     }
 
-    const info = xgmres.info;
-    if(!xgmres) {
+    const { info } = xgmres;
+    if(!info) {
         embeds.push({
             description: 'Привязан к несуществующему пользователю XGM.',
-            color: 16716876,
+            color: EMBED_ERROR_COLOR,
         });
         return embeds;
     }
 
     embeds.push({
         title: info.user.username,
-        url: XgmUserLink(xgmid),
+        url: GenXgmUserLink(xgmid),
         thumbnail: {
             url: info.avatar.big.startsWith('https:') ?
                 info.avatar.big :
@@ -291,7 +298,7 @@ const GenUserInfoEmbeds = async (_id) => {
                 value: String(info.user.level_xp),
             },
         ],
-        color: 16764928,
+        color: EMBED_MESSAGE_COLOR,
     });
 
     return embeds;
@@ -300,27 +307,23 @@ const GenUserInfoEmbeds = async (_id) => {
 client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
     if(interaction.type != Helpers.InteractionTypes.APPLICATION_COMMAND) return;
 
-    const data = interaction.data, user = interaction.user ?? interaction.member?.user;
+    const
+        { data } = interaction,
+        user = interaction.member?.user ?? interaction.user;
+
     if(!(data && user)) return;
+    if(!((data.name == 'who') || (data.name == 'who_user'))) return;
 
     Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
 
-    let userId, showPublic = false;
-
-    if(data.name == 'who') {
-        const options = data.options;
-        if(options) {
-            userId = options.find((p) => p.name == 'user')?.value;
-            showPublic = Boolean(options.find((p) => p.name == 'public')?.value);
-        }
-    } else if(data.name == 'who_user') {
-        userId = data.target_id;
-    }
+    const
+        targetId = data.options?.find((p) => p.name == 'user')?.value ?? data.target_id,
+        showPublic = Boolean(data.options?.find((p) => p.name == 'public')?.value);
 
     Actions.Application.CreateInteractionResponse(interaction.id, interaction.token, {
         type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
-            embeds: await GenUserInfoEmbeds(userId ?? user.id),
+            embeds: await GenUserInfoEmbeds((typeof targetId == 'string') ? data.resolved?.users?.[targetId] : user),
             flags: showPublic ? Helpers.MessageFlags.NO_FLAGS : Helpers.MessageFlags.EPHEMERAL,
         },
     }).catch(Logger.Error);
@@ -332,37 +335,34 @@ client.events.on(Events.MESSAGE_CREATE, async (message) => {
     const channel = ConnectedServers.get(message.guild_id)?.channels.get(message.channel_id);
     if(channel?.type != Helpers.ChannelTypes.GUILD_NEWS) return;
 
-    await Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Warn);
+    await Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Error);
 
     const title = message.embeds?.[0]?.title;
     if(typeof title != 'string') return;
 
     await Actions.Thread.StartWithMessage(message.channel_id, message.id, {
         name: title.replace(/[\/\\]/g, '|'),
-    }).catch(Logger.Warn);
+    }).catch(Logger.Error);
 });
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
-    ConnectedServers.get(member.guild_id)?.members.set(member.user.id, member);
+    const { guild_id, user: { id } } = member;
+    ConnectedServers.get(guild_id)?.members.set(id, member);
 
-    if(member.guild_id != config.server) return;
-
-    SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mention.User(member.user.id)} присоединился к серверу.`);
-
-    const userInfo = await usersDb.findOne({ _id: member.user.id });
-    userInfo && SyncUser(userInfo._id, userInfo.xgmid, false);
+    if(guild_id != config.server) return;
+    SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mention.User(id)} присоединился к серверу.`);
+    CheckUser(id, false);
 });
 
 client.events.on(Events.GUILD_MEMBER_UPDATE, (member) => {
     ConnectedServers.get(member.guild_id)?.members.set(member.user.id, member);
 });
 
-client.events.on(Events.GUILD_MEMBER_REMOVE, (member) => {
-    ConnectedServers.get(member.guild_id)?.members.delete(member.user.id);
+client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user: { id } }) => {
+    ConnectedServers.get(guild_id)?.members.delete(id);
 
-    if(member.guild_id != config.server) return;
-
-    SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mention.User(member.user.id)} покинул сервер.`);
+    if(guild_id != config.server) return;
+    SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mention.User(id)} покинул сервер.`);
 });
 
 client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) => {
@@ -385,7 +385,6 @@ client.events.on(Events.GUILD_CREATE, (server) => {
     });
 
     if(server.id != config.server) return;
-
     SetMarks(server.emojis);
 });
 
@@ -400,37 +399,38 @@ client.events.on(Events.GUILD_UPDATE, ({ id, roles, channels }) => {
         server.channels = GenMap(channels);
 });
 
-client.events.on(Events.GUILD_DELETE, (deleted) =>
-    !deleted.unavailable && ConnectedServers.delete(deleted.id));
+client.events.on(Events.GUILD_DELETE, ({ unavailable, id }) =>
+    !unavailable && ConnectedServers.delete(id));
 
 client.events.on(Events.GUILD_MEMBERS_CHUNK, (() => {
     let usersSynced = false;
-    return (chunk) => {
-        const server = ConnectedServers.get(chunk.guild_id);
+    return ({ guild_id, members, chunk_index, chunk_count }) => {
+        const server = ConnectedServers.get(guild_id);
         if(!server) return;
 
-        for(const member of chunk.members)
+        for(const member of members)
             server.members.set(member.user.id, member);
 
-        if(usersSynced || (server.id != config.server) || (chunk.chunk_index < chunk.chunk_count - 1)) return;
-
+        if(usersSynced || (server.id != config.server) || (chunk_index < chunk_count - 1)) return;
         usersSynced = true;
         RunSync();
     };
 })());
 
-const SetRoleData = (data) =>
-    ConnectedServers.get(data.guild_id)?.roles.set(data.role.id, data.role);
+const SetRoleData = ({ guild_id, role }) =>
+    ConnectedServers.get(guild_id)?.roles.set(role.id, role);
 
 client.events.on(Events.GUILD_ROLE_CREATE, SetRoleData);
 client.events.on(Events.GUILD_ROLE_UPDATE, SetRoleData);
 
-client.events.on(Events.GUILD_ROLE_DELETE, (data) =>
-    ConnectedServers.get(data.guild_id)?.roles.delete(data.role_id));
+client.events.on(Events.GUILD_ROLE_DELETE, ({ guild_id, role_id }) =>
+    ConnectedServers.get(guild_id)?.roles.delete(role_id));
 
-client.events.on(Events.GUILD_BAN_ADD, (data) => CheckBan(data, true));
+client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user: { id } }) =>
+    (guild_id == config.server) && CheckUser(id, true));
 
-client.events.on(Events.GUILD_BAN_REMOVE, (data) => CheckBan(data, false));
+client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user: { id } }) =>
+    (guild_id == config.server) && CheckUser(id, false));
 
 const SetChannelData = (channel) =>
     ConnectedServers.get(channel.guild_id)?.channels.set(channel.id, channel);
@@ -438,8 +438,8 @@ const SetChannelData = (channel) =>
 client.events.on(Events.CHANNEL_CREATE, SetChannelData);
 client.events.on(Events.CHANNEL_UPDATE, SetChannelData);
 
-client.events.on(Events.CHANNEL_DELETE, (channel) =>
-    ConnectedServers.get(channel.guild_id)?.channels.delete(channel.id));
+client.events.on(Events.CHANNEL_DELETE, ({ guild_id, id }) =>
+    ConnectedServers.get(guild_id)?.channels.delete(id));
 
 client.Connect(authorization, Helpers.Intents.SYSTEM
     | Helpers.Intents.GUILDS
@@ -456,6 +456,12 @@ const
     CLIENT_SECRET = process.env.CLIENT_SECRET,
     REDIRECT_URL = process.env.REDIRECT_URL;
 
+const SendPM = async (recipient_id, content) => {
+    const channel = await Actions.User.CreateDM({ recipient_id }).catch(Logger.Error);
+    if(!channel) return;
+    Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
+};
+
 const VerifyUser = async (code, xgmid) => {
     const res = await Actions.OAuth2.TokenExchange({
         client_id: CLIENT_ID,
@@ -471,7 +477,7 @@ const VerifyUser = async (code, xgmid) => {
         return { code: 400 };
     }
 
-    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, Helpers.TokenTypes.BEARER) }).catch(Logger.Warn);
+    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, Helpers.TokenTypes.BEARER) }).catch(Logger.Error);
     if(!user) {
         Logger.Warn('Verify: user request failed.');
         return { code: 500 };
@@ -489,8 +495,8 @@ const VerifyUser = async (code, xgmid) => {
         } else {
             await usersDb.update({ _id: user.id }, { xgmid });
             usersDb.nedb.persistence.compactDatafile();
-            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был <${XgmUserLink(userInfo.xgmid)}>`);
-            SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${XgmUserLink(xgmid)}`);
+            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(userInfo.xgmid)}>`);
+            SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
             retCode = 200;
         }
     } else {
@@ -498,11 +504,8 @@ const VerifyUser = async (code, xgmid) => {
         if(clone) {
             Logger.Log(`Verify: remove ${user.id}`);
             await usersDb.remove({ xgmid });
-            const member = ConnectedServers.get(config.server).members.get(clone._id);
-            if(member) {
-                Actions.Member.RemoveRole(config.server, member.user.id, config.role.user);
-                Actions.Member.RemoveRole(config.server, member.user.id, config.role.twilight);
-            }
+            const member = ConnectedServers.get(config.server)?.members.get(clone._id);
+            member && ClearUser(member);
         }
 
         Logger.Log(`Verify: ${user.id} -> ${xgmid}`);
@@ -510,15 +513,15 @@ const VerifyUser = async (code, xgmid) => {
         usersDb.nedb.persistence.compactDatafile();
 
         SendLogMsg(clone ?
-            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(clone._id)}` :
-            `Привязка аккаунта ${Tools.Mention.User(user.id)} :white_check_mark: ${XgmUserLink(xgmid)}`
+            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(clone._id)}` :
+            `Привязка аккаунта ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}`
         );
-        SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${XgmUserLink(xgmid)}`);
+        SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
 
         retCode = 200;
     }
 
-    SyncUser(user.id, xgmid, false);
+    SyncUser(user.id, xgmid, false).catch(Logger.Error);
 
     return { code: retCode, content: user.id };
 };
@@ -527,14 +530,14 @@ const WH_SYSLOG_ID = process.env.WH_SYSLOG_ID, WH_SYSLOG_TOKEN = process.env.WH_
 
 const SendSysLogMsg = async (content) => {
     for(let i = 0; i < content.length; i += MESSAGE_MAX_CHARS)
-        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substring(i, i + MESSAGE_MAX_CHARS) }).catch(Logger.Error);
+        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substring(i, i + MESSAGE_MAX_CHARS) });
 };
 
 const webApiFuncs = {
     '/verify': async (request, response) => {
         const
-            code = request.headers.code,
-            xgmid = Number(request.headers.userid);
+            code = request.headers['code'],
+            xgmid = Number(request.headers['userid']);
 
         if(!(code && (xgmid > 0)))
             return response.statusCode = 400;
@@ -548,7 +551,7 @@ const webApiFuncs = {
     },
 
     '/delete': async (request, response) => {
-        const xgmid = Number(request.headers.userid);
+        const xgmid = Number(request.headers['userid']);
         if(!(xgmid > 0))
             return response.statusCode = 400;
 
@@ -559,31 +562,31 @@ const webApiFuncs = {
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        const data = await ReadIncomingData(request);
-
         Logger.Log(`Verify: delete! ${userInfo._id}`);
+
+        const data = await ReadIncomingData(request);
         await usersDb.remove({ xgmid });
         usersDb.nedb.persistence.compactDatafile();
-        SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(userInfo._id)} :no_entry: ${XgmUserLink(xgmid)}` + (data ? `\n**Причина:** ${data}` : ''));
+
+        const reason = data ? `**Причина:** ${data}` : '';
+        SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(userInfo._id)} :no_entry: ${GenXgmUserLink(xgmid)}\n${reason}`);
 
         if(ConnectedServers.get(config.server).members.has(userInfo._id))
             Actions.Member.RemoveRole(config.server, userInfo._id, config.role.user);
 
-        SendPM(userInfo._id, ':no_entry: Аккаунт деавторизован, так как был удален.');
+        SendPM(userInfo._id, `:no_entry: Аккаунт деавторизован.\n${reason}`);
 
         response.statusCode = 200;
     },
 
     '/update-global-status': async (request, response) => {
-        const xgmid = Number(request.headers.userid);
-        if(!(xgmid > 0))
-            return response.statusCode = 400;
+        const xgmid = Number(request.headers['userid']);
+        if(!(xgmid > 0)) return response.statusCode = 400;
 
-        Logger.Log(`S: ${xgmid} - '${request.headers.status}'`);
+        Logger.Log(`S: ${xgmid} - '${request.headers['status']}'`);
 
         const userInfo = await usersDb.findOne({ xgmid });
-        if(!userInfo)
-            return response.statusCode = 200;
+        if(!userInfo) return response.statusCode = 200;
 
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
@@ -594,30 +597,23 @@ const webApiFuncs = {
             await Actions.Ban.Get(config.server, userInfo._id).
                 then(() => true).
                 catch((e) => ((e.code == 404) || Logger.Error(e), false)),
-        ));
+        ).catch(Logger.Error));
 
         response.statusCode = 200;
     },
 
     '/pm': async (request, response) => {
-        const xgmid = Number(request.headers.userid);
-        if(!(xgmid > 0))
-            return response.statusCode = 400;
+        const xgmid = Number(request.headers['userid']);
+        if(!(xgmid > 0)) return response.statusCode = 400;
 
         const userInfo = await usersDb.findOne({ xgmid });
-        if(!userInfo)
-            return response.statusCode = 406;
+        if(!userInfo) return response.statusCode = 404;
 
         if(userInfo._id == client.user.id)
             return response.statusCode = 418;
 
-        const len = Number(request.headers['Content-Length']);
-        if(len > 4000)
-            return response.statusCode = 413;
-
         const data = await ReadIncomingData(request);
-        if(!data)
-            return response.statusCode = 400;
+        if(!data) return response.statusCode = 400;
 
         SendPM(userInfo._id, String(data).substring(0, MESSAGE_MAX_CHARS));
 
@@ -625,64 +621,60 @@ const webApiFuncs = {
     },
 
     '/send': async (request, response) => {
-        const channelid = request.headers.channelid;
-        if(!channelid)
-            return response.statusCode = 400;
-
-        const len = Number(request.headers['Content-Length']);
-        if(len > 4000)
-            return response.statusCode = 413;
+        const channelid = request.headers['channelid'];
+        if(!channelid) return response.statusCode = 400;
 
         const data = await ReadIncomingData(request);
-        if(!data)
-            return response.statusCode = 400;
+        if(!data) return response.statusCode = 400;
 
         try {
             await Actions.Message.Create(channelid, { content: String(data).substring(0, MESSAGE_MAX_CHARS) });
-            response.statusCode = 200;
         } catch(e) {
-            Logger.Warn(e);
-            response.statusCode = 403;
+            Logger.Error(e);
+            response.statusCode = e.code ?? 500;
+            return;
         }
+
+        response.statusCode = 200;
     },
 
     '/sys': async (request, response) => {
-        const len = Number(request.headers['Content-Length']);
-        if(len > 4000)
-            return response.statusCode = 413;
-
         const data = await ReadIncomingData(request);
-        if(!data)
-            return response.statusCode = 400;
+        if(!data) return response.statusCode = 400;
 
-        SendSysLogMsg(String(data));
-
+        SendSysLogMsg(String(data)).catch(Logger.Error);
         response.statusCode = 200;
     },
 };
 
+const MAX_PAYLOAD = 8 * 1024;
+
 const HandleRequest = async (request, response) => {
-    if(request.method != 'POST')
+    const { method, headers, url } = request;
+    Logger.Log(`${method} '${url}'`);
+
+    if(method != 'POST')
         return response.statusCode = 405;
 
-    if(request.headers.authorization != AUTH_SVC)
+    if(headers['authorization'] != AUTH_SVC)
         return response.statusCode = 401;
 
-    if(!webApiFuncs.hasOwnProperty(request.url))
+    if(!webApiFuncs.hasOwnProperty(url))
         return response.statusCode = 404;
 
-    Logger.Log(`POST '${request.url}'`);
-    await webApiFuncs[request.url](request, response);
+    if(Number(headers['content-length']) > MAX_PAYLOAD)
+        return response.statusCode = 413;
+
+    await webApiFuncs[url](request, response);
 };
 
 import http from 'http';
 
 AUTH_SVC && CLIENT_ID && CLIENT_SECRET && REDIRECT_URL && http.createServer(async (request, response) => {
-    try {
-        await HandleRequest(request, response);
-    } catch(e) {
+    await HandleRequest(request, response).catch((e) => {
         Logger.Error(e);
         response.statusCode = 500;
-    }
+    });
     response.end();
+    Logger.Log(`Response end. Code: ${response.statusCode}`);
 }).listen(80);
