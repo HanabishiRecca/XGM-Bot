@@ -313,7 +313,7 @@ client.events.on(Events.INTERACTION_CREATE, async (interaction) => {
         user = interaction.member?.user ?? interaction.user;
 
     if(!(data && user)) return;
-    if(!((data.name == 'who') || (data.name == 'who_user'))) return;
+    if(!config.commands.includes(data.id)) return;
 
     Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
 

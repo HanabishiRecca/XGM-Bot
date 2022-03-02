@@ -16,6 +16,11 @@ export default {
         twilight: '572031693947666478',
     },
 
+    commands: [
+        '829379545554616341',
+        '874983640000528435',
+    ],
+
     marks: [
         //PLATFORMS
 
