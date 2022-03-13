@@ -167,7 +167,9 @@ const SyncUsers = async () => {
 
     try {
         const members = ConnectedServers.get(config.server)?.members;
-        if(!members) return;
+
+        if(!members)
+            return Logger.Warn('No server members to sync!');
 
         const xgms = new Set();
         for(const userInfo of users)
@@ -187,7 +189,9 @@ const RunSync = (() => {
         if(syncing) return;
         syncing = true;
 
+        Logger.Log('Users sync start...');
         await SyncUsers().catch(Logger.Error);
+        Logger.Log('Users sync end.');
         global.gc?.();
 
         syncing = false;
