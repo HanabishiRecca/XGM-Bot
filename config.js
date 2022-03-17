@@ -3,9 +3,15 @@
 const
     marksChannel = '544569448649064458',
     platformsMessage = '544579657559834652',
-    versionsMessage = '544582556264431617';
+    versionsMessage = '544582556264431617',
+    StoragePath = (name) => `${process.env.STORAGE}/${name}.db`;
 
 export default {
+    storage: {
+        users: StoragePath('users'),
+        app: StoragePath('app'),
+    },
+
     server: '543458159818440705',
 
     role: {

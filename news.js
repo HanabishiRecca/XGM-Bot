@@ -19,6 +19,7 @@ const WH_NEWS_ID = process.env.WH_NEWS_ID, WH_NEWS_TOKEN = process.env.WH_NEWS_T
 !process.env.TOKEN && Shutdown('Token required.');
 
 import Storage from './storage.js';
+import config from './config.js';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions } from 'discord-slim';
 import { HttpsGet } from './misc.js';
@@ -36,12 +37,10 @@ const DecodeHtmlEntity = (() => {
 
 const CleanupHtml = (str) => str.replace(/<\/?[^<>]*>/gm, '');
 
-const dbPath = `${process.env.STORAGE}/app.db`;
-
-const AppState = Storage.Load(dbPath);
+const AppState = Storage.Load(config.storage.app);
 
 const SaveAppState = () =>
-    Storage.Save(AppState, dbPath);
+    Storage.Save(AppState, config.storage.app);
 
 const paramName = 'lastNewsTime';
 

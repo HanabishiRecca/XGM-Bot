@@ -16,15 +16,14 @@ process.on('unhandledRejection', Shutdown);
 
 import { Client, ClientEvents, Authorization, Events, Actions, Helpers, Tools } from 'discord-slim';
 import Storage from './storage.js';
-import { HttpsGet, ReadIncomingData } from './misc.js';
+import { GenXgmUserLink, GetUserCreationDate, GenMap, ReadIncomingData } from './misc.js';
 import config from './config.js';
+import { SyncUser, ClearUser, RequestXgmUser } from './users.js';
 
-const dbPath = `${process.env.STORAGE}/users.db`;
-
-const AuthUsers = Storage.Load(dbPath);
+const AuthUsers = Storage.Load(config.storage.users);
 
 const SaveAuthUsers = () =>
-    Storage.Save(AuthUsers, dbPath);
+    Storage.Save(AuthUsers, config.storage.users);
 
 const FindAuthUser = (value) => {
     for(const [k, v] of AuthUsers)
@@ -50,12 +49,6 @@ client.on(ClientEvents.DISCONNECT, (code) => Logger.Error(`Disconnect. (${code})
 client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
-
-const
-    GenXgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`,
-    GetUserCreationDate = (user_id) => Number(BigInt(user_id) >> 22n) + 1420070400000,
-    HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,
-    IsInProject = (status) => status && ((status == 'leader') || (status == 'moderator') || (status == 'active'));
 
 const MarkMessages = (() => {
     const msgs = new Map();
@@ -101,119 +94,12 @@ const SetMarks = (() => {
 
 const ConnectedServers = new Map();
 
-const RoleSwitch = async (member, role, enable) => {
-    if(!(member && role)) return;
-
-    const f = enable ?
-        (HasRole(member, role) ? null : Actions.Member.AddRole) :
-        (HasRole(member, role) ? Actions.Member.RemoveRole : null);
-
-    await f?.(config.server, member.user.id, role);
-};
-
-const RequestXgmUser = async (xgmid) => {
-    let data;
-    try {
-        data = await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`);
-    } catch(e) {
-        if(e.statusCode == 404) {
-            Logger.Warn(`XGM user id not found: ${xgmid}`);
-            return {};
-        }
-        throw e;
-    }
-    return JSON.parse(data);
-};
-
-const SyncUser = async (userid, xgmid, banned) => {
-    if(userid == client.user.id) return;
-
-    const { info, state } = await RequestXgmUser(xgmid);
-    if(!(info && state)) return;
-
-    const
-        status = state.access?.staff_status,
-        member = ConnectedServers.get(config.server)?.members.get(userid);
-
-    if(status == 'suspended') {
-        if(member || !banned)
-            await Actions.Ban.Add(config.server, userid);
-        return;
-    }
-
-    if(!member) {
-        if(banned)
-            await Actions.Ban.Remove(config.server, userid);
-        return;
-    }
-
-    await RoleSwitch(member, config.role.readonly, status == 'readonly');
-    await RoleSwitch(member, config.role.user, true);
-    await RoleSwitch(member, config.role.staff, IsInProject(status));
-    await RoleSwitch(member, config.role.team, IsInProject(state.projects?.['833']?.status));
-    await RoleSwitch(member, config.role.twilight, info.user?.seeTwilight);
-};
-
-const ClearUser = async (member) => {
-    await RoleSwitch(member, config.role.readonly, false);
-    await RoleSwitch(member, config.role.user, false);
-    await RoleSwitch(member, config.role.staff, false);
-    await RoleSwitch(member, config.role.team, false);
-    await RoleSwitch(member, config.role.twilight, false);
-};
-
-const SyncUsers = async () => {
-    const members = ConnectedServers.get(config.server)?.members;
-    if(!members) return Logger.Warn('No server members! Something wrong?');
-
-    try {
-        const bans = new Set();
-        for(const ban of await Actions.Guild.GetBans(config.server))
-            bans.add(ban.user.id);
-
-        for(const [id, xgmid] of AuthUsers)
-            await SyncUser(id, xgmid, bans.has(id));
-    } catch(e) {
-        Logger.Error(e);
-    }
-
-    try {
-        for(const member of members.values())
-            if(!AuthUsers.has(member?.user.id))
-                await ClearUser(member);
-    } catch(e) {
-        Logger.Error(e);
-    }
-};
-
-const RunSync = (() => {
-    let syncing = false;
-    return async () => {
-        if(syncing) return;
-        syncing = true;
-
-        Logger.Log('Users sync start...');
-        await SyncUsers().catch(Logger.Error);
-        Logger.Log('Users sync end.');
-        global.gc?.();
-
-        syncing = false;
-    };
-})();
-
-setInterval(RunSync, 3600000);
-
 const CheckUser = (id, flag) => {
     const xgmid = AuthUsers.get(id);
-    xgmid && SyncUser(id, xgmid, flag).catch(Logger.Error);
-};
+    if(!xgmid) return;
 
-const GenMap = (arr) => {
-    const map = new Map();
-    if(Array.isArray(arr))
-        for(const elem of arr)
-            map.set(elem.id, elem);
-    return map;
+    const member = ConnectedServers.get(config.server)?.members.get(id);
+    SyncUser(id, xgmid, flag, member).catch(Logger.Error);
 };
 
 const AddServer = (server) =>
@@ -410,20 +296,14 @@ client.events.on(Events.GUILD_UPDATE, ({ id, roles, channels }) => {
 client.events.on(Events.GUILD_DELETE, ({ unavailable, id }) =>
     !unavailable && ConnectedServers.delete(id));
 
-client.events.on(Events.GUILD_MEMBERS_CHUNK, (() => {
-    let usersSynced = false;
-    return ({ guild_id, members, chunk_index, chunk_count }) => {
-        const server = ConnectedServers.get(guild_id);
-        if(!server) return;
+client.events.on(Events.GUILD_MEMBERS_CHUNK, ({ guild_id, members }) => {
+    const server = ConnectedServers.get(guild_id);
+    if(!server) return;
 
-        for(const member of members)
-            server.members.set(member.user.id, member);
-
-        if(usersSynced || (server.id != config.server) || (chunk_index < chunk_count - 1)) return;
-        usersSynced = true;
-        RunSync();
-    };
-})());
+    const sm = server.members;
+    for(const member of members)
+        sm.set(member.user.id, member);
+});
 
 const SetRoleData = ({ guild_id, role }) =>
     ConnectedServers.get(guild_id)?.roles.set(role.id, role);
@@ -468,6 +348,16 @@ const SendPM = async (recipient_id, content) => {
     const channel = await Actions.User.CreateDM({ recipient_id }).catch(Logger.Error);
     if(!channel) return;
     Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
+};
+
+const UpdateUserState = async (id, xgmid) => {
+    const
+        member = ConnectedServers.get(config.server)?.members.get(id),
+        ban = await Actions.Ban.Get(config.server, id).
+            then(() => true).
+            catch((e) => ((e.code == 404) || Logger.Error(e), false));
+
+    SyncUser(id, xgmid, ban, member).catch(Logger.Error);
 };
 
 const VerifyUser = async (code, xgmid) => {
@@ -529,7 +419,7 @@ const VerifyUser = async (code, xgmid) => {
         retCode = 200;
     }
 
-    SyncUser(user.id, xgmid, false).catch(Logger.Error);
+    UpdateUserState(user.id, xgmid);
 
     return { code: retCode, content: user.id };
 };
@@ -598,13 +488,7 @@ const webApiFuncs = {
         if(id == client.user.id)
             return response.statusCode = 418;
 
-        setImmediate(async () => SyncUser(
-            id,
-            xgmid,
-            await Actions.Ban.Get(config.server, id).
-                then(() => true).
-                catch((e) => ((e.code == 404) || Logger.Error(e), false)),
-        ).catch(Logger.Error));
+        UpdateUserState(id, xgmid);
 
         response.statusCode = 200;
     },

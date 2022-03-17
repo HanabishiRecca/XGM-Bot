@@ -2,6 +2,18 @@
 
 import https from 'https';
 
+export const
+    GenXgmUserLink = (xgmid) => `https://xgm.guru/user/${xgmid}`,
+    GetUserCreationDate = (user_id) => Number(BigInt(user_id) >> 22n) + 1420070400000;
+
+export const GenMap = (arr) => {
+    const map = new Map();
+    if(Array.isArray(arr))
+        for(const elem of arr)
+            map.set(elem.id, elem);
+    return map;
+};
+
 export const ReadIncomingData = (incoming) => new Promise((resolve, reject) => {
     const chunks = [];
     let dataLen = 0;
