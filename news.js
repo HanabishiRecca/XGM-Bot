@@ -18,7 +18,7 @@ const WH_NEWS_ID = process.env.WH_NEWS_ID, WH_NEWS_TOKEN = process.env.WH_NEWS_T
 !process.env.STORAGE && Shutdown('Storage path required.');
 !process.env.TOKEN && Shutdown('Token required.');
 
-import Database from 'nedb-promise';
+import Storage from './storage.js';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions } from 'discord-slim';
 import { HttpsGet } from './misc.js';
@@ -36,9 +36,14 @@ const DecodeHtmlEntity = (() => {
 
 const CleanupHtml = (str) => str.replace(/<\/?[^<>]*>/gm, '');
 
-const appDb = Database({ filename: `${process.env.STORAGE}/app.db`, autoload: true });
+const dbPath = `${process.env.STORAGE}/app.db`;
 
-const lastNewsTime = { _id: 'lastNewsTime' };
+const AppState = Storage.Load(dbPath);
+
+const SaveAppState = () =>
+    Storage.Save(AppState, dbPath);
+
+const paramName = 'lastNewsTime';
 
 const requestOptions = {
     authorization: new Authorization(process.env.TOKEN),
@@ -56,9 +61,7 @@ const requestOptions = {
     const items = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' }).parse(data)?.rss?.channel?.item;
     if(!items?.length) Shutdown('Incorrect data received.');
 
-    const
-        option = await appDb.findOne(lastNewsTime),
-        lastTime = option?.value ?? Date.now();
+    const lastTime = AppState.get(paramName) ?? Date.now();
 
     let maxTime = 0, posts;
 
@@ -95,8 +98,8 @@ const requestOptions = {
     }
 
     if(lastTime != maxTime) {
-        await appDb.update(lastNewsTime, { $set: { value: maxTime } }, { upsert: true });
-        appDb.nedb.persistence.compactDatafile();
+        AppState.set(paramName, maxTime);
+        SaveAppState();
     }
 
     Logger.Log('News check job finished.');

@@ -14,12 +14,23 @@ process.on('unhandledRejection', Shutdown);
 !process.env.TOKEN && Shutdown('Token required.');
 !process.env.STORAGE && Shutdown('Storage path required.');
 
-import Database from 'nedb-promise';
 import { Client, ClientEvents, Authorization, Events, Actions, Helpers, Tools } from 'discord-slim';
+import Storage from './storage.js';
 import { HttpsGet, ReadIncomingData } from './misc.js';
 import config from './config.js';
 
-const usersDb = Database({ filename: `${process.env.STORAGE}/users.db`, autoload: true });
+const dbPath = `${process.env.STORAGE}/users.db`;
+
+const AuthUsers = Storage.Load(dbPath);
+
+const SaveAuthUsers = () =>
+    Storage.Save(AuthUsers, dbPath);
+
+const FindAuthUser = (value) => {
+    for(const [k, v] of AuthUsers)
+        if(value == v)
+            return k;
+};
 
 const authorization = new Authorization(process.env.TOKEN);
 
@@ -152,15 +163,13 @@ const ClearUser = async (member) => {
 };
 
 const SyncUsers = async () => {
-    const users = await usersDb.find({});
-
     try {
         const bans = new Set();
         for(const ban of await Actions.Guild.GetBans(config.server))
             bans.add(ban.user.id);
 
-        for(const userInfo of users)
-            await SyncUser(userInfo._id, userInfo.xgmid, bans.has(userInfo._id));
+        for(const [id, xgmid] of AuthUsers)
+            await SyncUser(id, xgmid, bans.has(id));
     } catch(e) {
         Logger.Error(e);
     }
@@ -171,12 +180,8 @@ const SyncUsers = async () => {
         if(!members)
             return Logger.Warn('No server members to sync!');
 
-        const xgms = new Set();
-        for(const userInfo of users)
-            xgms.add(userInfo._id);
-
         for(const member of members.values())
-            if(!xgms.has(member?.user.id))
+            if(!AuthUsers.has(member?.user.id))
                 await ClearUser(member);
     } catch(e) {
         Logger.Error(e);
@@ -200,9 +205,9 @@ const RunSync = (() => {
 
 setInterval(RunSync, 3600000);
 
-const CheckUser = async (id, flag) => {
-    const userInfo = await usersDb.findOne({ _id: id });
-    userInfo && SyncUser(id, userInfo.xgmid, flag).catch(Logger.Error);
+const CheckUser = (id, flag) => {
+    const xgmid = AuthUsers.get(id);
+    xgmid && SyncUser(id, xgmid, flag).catch(Logger.Error);
 };
 
 const GenMap = (arr) => {
@@ -258,7 +263,7 @@ const GenUserInfoEmbeds = async (user) => {
         ],
     });
 
-    const xgmid = (await usersDb.findOne({ _id: user.id }))?.xgmid;
+    const xgmid = AuthUsers.get(user.id);
     if(!xgmid) {
         embeds.push({
             description: 'Нет привязки к XGM.',
@@ -492,33 +497,33 @@ const VerifyUser = async (code, xgmid) => {
         return { code: 418 };
 
     let retCode;
-    const userInfo = await usersDb.findOne({ _id: user.id });
-    if(userInfo) {
-        if(userInfo.xgmid == xgmid) {
+    const xid = AuthUsers.get(user.id);
+    if(xid) {
+        if(xid == xgmid) {
             SendPM(user.id, 'Аккаунт уже подтвержден.');
             retCode = 208;
         } else {
-            await usersDb.update({ _id: user.id }, { xgmid });
-            usersDb.nedb.persistence.compactDatafile();
-            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(userInfo.xgmid)}>`);
+            AuthUsers.set(user.id, xgmid);
+            SaveAuthUsers();
+            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(xid)}>`);
             SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
             retCode = 200;
         }
     } else {
-        const clone = await usersDb.findOne({ xgmid });
-        if(clone) {
+        const prev = FindAuthUser(xgmid);
+        if(prev) {
             Logger.Log(`Verify: remove ${user.id}`);
-            await usersDb.remove({ xgmid });
-            const member = ConnectedServers.get(config.server)?.members.get(clone._id);
+            AuthUsers.delete(prev);
+            const member = ConnectedServers.get(config.server)?.members.get(prev);
             member && ClearUser(member);
         }
 
         Logger.Log(`Verify: ${user.id} -> ${xgmid}`);
-        await usersDb.insert({ _id: user.id, xgmid });
-        usersDb.nedb.persistence.compactDatafile();
+        AuthUsers.set(user.id, xgmid);
+        SaveAuthUsers();
 
-        SendLogMsg(clone ?
-            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(clone._id)}` :
+        SendLogMsg(prev ?
+            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(prev)}` :
             `Привязка аккаунта ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}`
         );
         SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
@@ -557,29 +562,28 @@ const webApiFuncs = {
 
     '/delete': async (request, response) => {
         const xgmid = Number(request.headers['userid']);
-        if(!(xgmid > 0))
-            return response.statusCode = 400;
+        if(!(xgmid > 0)) return response.statusCode = 400;
 
-        const userInfo = await usersDb.findOne({ xgmid });
-        if(!userInfo)
-            return response.statusCode = 406;
+        const id = FindAuthUser(xgmid);
+        if(!id) return response.statusCode = 200;
 
-        if(userInfo._id == client.user.id)
+        if(id == client.user.id)
             return response.statusCode = 418;
 
-        Logger.Log(`Verify: delete! ${userInfo._id}`);
+        Logger.Log(`Verify: delete! ${id}`);
 
-        const data = await ReadIncomingData(request);
-        await usersDb.remove({ xgmid });
-        usersDb.nedb.persistence.compactDatafile();
+        AuthUsers.delete(id);
+        SaveAuthUsers();
 
-        const reason = data ? `**Причина:** ${data}` : '';
-        SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(userInfo._id)} :no_entry: ${GenXgmUserLink(xgmid)}\n${reason}`);
+        const member = ConnectedServers.get(config.server)?.members.get(id);
+        member && ClearUser(member);
 
-        if(ConnectedServers.get(config.server).members.has(userInfo._id))
-            Actions.Member.RemoveRole(config.server, userInfo._id, config.role.user);
+        const
+            data = await ReadIncomingData(request),
+            reason = data ? `**Причина:** ${data}` : '';
 
-        SendPM(userInfo._id, `:no_entry: Аккаунт деавторизован.\n${reason}`);
+        SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(id)} :no_entry: ${GenXgmUserLink(xgmid)}\n${reason}`);
+        SendPM(id, `:no_entry: Аккаунт деавторизован.\n${reason}`);
 
         response.statusCode = 200;
     },
@@ -590,16 +594,16 @@ const webApiFuncs = {
 
         Logger.Log(`S: ${xgmid} - '${request.headers['status']}'`);
 
-        const userInfo = await usersDb.findOne({ xgmid });
-        if(!userInfo) return response.statusCode = 200;
+        const id = FindAuthUser(xgmid);
+        if(!id) return response.statusCode = 200;
 
-        if(userInfo._id == client.user.id)
+        if(id == client.user.id)
             return response.statusCode = 418;
 
         setImmediate(async () => SyncUser(
-            userInfo._id,
+            id,
             xgmid,
-            await Actions.Ban.Get(config.server, userInfo._id).
+            await Actions.Ban.Get(config.server, id).
                 then(() => true).
                 catch((e) => ((e.code == 404) || Logger.Error(e), false)),
         ).catch(Logger.Error));
@@ -611,16 +615,16 @@ const webApiFuncs = {
         const xgmid = Number(request.headers['userid']);
         if(!(xgmid > 0)) return response.statusCode = 400;
 
-        const userInfo = await usersDb.findOne({ xgmid });
-        if(!userInfo) return response.statusCode = 404;
+        const id = FindAuthUser(xgmid);
+        if(!id) return response.statusCode = 404;
 
-        if(userInfo._id == client.user.id)
+        if(id == client.user.id)
             return response.statusCode = 418;
 
         const data = await ReadIncomingData(request);
         if(!data) return response.statusCode = 400;
 
-        SendPM(userInfo._id, String(data).substring(0, MESSAGE_MAX_CHARS));
+        SendPM(id, String(data).substring(0, MESSAGE_MAX_CHARS));
 
         response.statusCode = 200;
     },
