@@ -163,6 +163,9 @@ const ClearUser = async (member) => {
 };
 
 const SyncUsers = async () => {
+    const members = ConnectedServers.get(config.server)?.members;
+    if(!members) return Logger.Warn('No server members! Something wrong?');
+
     try {
         const bans = new Set();
         for(const ban of await Actions.Guild.GetBans(config.server))
@@ -175,11 +178,6 @@ const SyncUsers = async () => {
     }
 
     try {
-        const members = ConnectedServers.get(config.server)?.members;
-
-        if(!members)
-            return Logger.Warn('No server members to sync!');
-
         for(const member of members.values())
             if(!AuthUsers.has(member?.user.id))
                 await ClearUser(member);
