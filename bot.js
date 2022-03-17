@@ -569,3 +569,8 @@ AUTH_SVC && CLIENT_ID && CLIENT_SECRET && REDIRECT_URL && http.createServer(asyn
     response.end();
     Logger.Log(`Response end. Code: ${response.statusCode}`);
 }).listen(80);
+
+if(global.gc) {
+    setInterval(global.gc, 3600000);
+    global.gc();
+}
