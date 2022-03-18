@@ -1,6 +1,6 @@
 'use strict';
 
-import Logger from './log.js';
+import Logger from '../util/log.js';
 
 const Shutdown = (e) => {
     Logger.Error(e);
@@ -24,8 +24,8 @@ Check(WH_NEWS_TOKEN, 'News webhook token required.');
 Check(STORAGE, 'Storage path required.');
 Check(TOKEN, 'Bot token required.');
 
-import Storage from './storage.js';
-import { HttpsGet } from './misc.js';
+import Storage from '../util/storage.js';
+import { HttpsGet } from '../util/misc.js';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions } from 'discord-slim';
 

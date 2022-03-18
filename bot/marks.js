@@ -1,7 +1,7 @@
 'use strict';
 
-import Logger from './log.js';
-import config from './config.js';
+import Logger from '../util/log.js';
+import config from '../util/config.js';
 import { Actions, Tools } from 'discord-slim';
 
 const MarkMessages = (() => {

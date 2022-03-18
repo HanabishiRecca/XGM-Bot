@@ -1,6 +1,6 @@
 'use strict';
 
-import Logger from './log.js';
+import Logger from '../util/log.js';
 
 export const Shutdown = (e) => {
     Logger.Error(e);

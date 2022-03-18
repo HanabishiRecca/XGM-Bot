@@ -1,7 +1,7 @@
 'use strict';
 
-import Logger from './log.js';
-import Storage from './storage.js';
+import Logger from '../util/log.js';
+import Storage from '../util/storage.js';
 import { STORAGE, TOKEN, WH_LOG_ID, WH_LOG_TOKEN } from './process.js';
 import { Authorization, Actions } from 'discord-slim';
 

@@ -1,13 +1,13 @@
 'use strict';
 
-import Logger from './log.js';
-import config from './config.js';
+import Logger from '../util/log.js';
+import config from '../util/config.js';
+import { SyncUser } from '../util/users.js';
+import { GenMap } from '../util/misc.js';
 import { Shutdown } from './process.js';
 import { ConnectedServers, AuthUsers, SendLogMsg, authorization } from './state.js';
-import { SyncUser } from './users.js';
 import { SetMarks, ReactionProc } from './marks.js';
 import { HandleInteraction } from './commands.js';
-import { GenMap } from './misc.js';
 import { Client, ClientEvents, Events, Actions, Helpers, Tools } from 'discord-slim';
 
 const client = new Client();

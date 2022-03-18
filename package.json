@@ -5,7 +5,7 @@
     "discord": "https://discord.gg/vdS2kgr",
     "repository": "https://github.com/HanabishiRecca/XGM-Bot",
     "license": "MIT",
-    "main": "index.js",
+    "main": "bot/index.js",
     "type": "module",
     "dependencies": {
         "discord-slim": "2.5.*",

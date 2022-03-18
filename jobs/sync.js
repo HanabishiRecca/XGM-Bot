@@ -1,6 +1,6 @@
 'use strict';
 
-import Logger from './log.js';
+import Logger from '../util/log.js';
 
 const Shutdown = (e) => {
     Logger.Error(e);
@@ -20,9 +20,9 @@ const Check = (value, message) => value || Shutdown(message);
 Check(TOKEN, 'Bot token required.');
 Check(STORAGE, 'Storage path required.');
 
-import Storage from './storage.js';
-import config from './config.js';
-import { SyncUser, ClearUser } from './users.js';
+import Storage from '../util/storage.js';
+import config from '../util/config.js';
+import { SyncUser, ClearUser } from '../util/users.js';
 import { Authorization, Actions } from 'discord-slim';
 
 const MEMBERS_REQUEST_LIMIT = 1000;

@@ -1,11 +1,11 @@
 'use strict';
 
-import Logger from './log.js';
-import config from './config.js';
+import Logger from '../util/log.js';
+import config from '../util/config.js';
+import { SyncUser, ClearUser } from '../util/users.js';
+import { GenXgmUserLink, ReadIncomingData } from '../util/misc.js';
 import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL } from './process.js';
 import { ConnectedServers, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
-import { SyncUser, ClearUser } from './users.js';
-import { GenXgmUserLink, ReadIncomingData } from './misc.js';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer } from 'http';
 

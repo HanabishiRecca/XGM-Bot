@@ -1,7 +1,7 @@
 'use strict';
 
 import './process.js';
-import './bot.js';
+import './client.js';
 import './server.js';
 
 if(global.gc) {
