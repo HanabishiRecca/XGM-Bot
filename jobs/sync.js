@@ -83,10 +83,10 @@ const CheckRevoked = async (users, members) => {
     Logger.Log(`Member count: ${members.size}.`);
 
     Logger.Log('Syncing authorized users...');
-    await SyncUsers().catch(Logger.Error);
+    await SyncUsers(users, members).catch(Logger.Error);
 
     Logger.Log('Checking for revoked members...');
-    await CheckRevoked().catch(Logger.Error);
+    await CheckRevoked(users, members).catch(Logger.Error);
 
     Logger.Log('Users sync job end.');
     process.exit();
