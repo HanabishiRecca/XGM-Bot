@@ -1,8 +1,8 @@
 'use strict';
 
-import { Actions } from 'discord-slim';
-import { HttpsGet } from './misc.js';
 import config from './config.js';
+import { HttpsGet } from './misc.js';
+import { Actions } from 'discord-slim';
 
 const
     HasRole = (member, role_id) => member.roles.indexOf(role_id) > -1,

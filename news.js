@@ -2,27 +2,49 @@
 
 import Logger from './log.js';
 
-const Shutdown = (err) => {
-    Logger.Error(err);
+const Shutdown = (e) => {
+    Logger.Error(e);
     process.exit(1);
 };
 
 process.on('uncaughtException', Shutdown);
 process.on('unhandledRejection', Shutdown);
 
-Logger.Log('News check job start.');
+const {
+    WH_NEWS_ID,
+    WH_NEWS_TOKEN,
+    STORAGE,
+    TOKEN,
+} = process.env;
 
-const WH_NEWS_ID = process.env.WH_NEWS_ID, WH_NEWS_TOKEN = process.env.WH_NEWS_TOKEN;
+const Check = (value, message) => value || Shutdown(message);
 
-!(WH_NEWS_ID && WH_NEWS_TOKEN) && Shutdown('No credentials.');
-!process.env.STORAGE && Shutdown('Storage path required.');
-!process.env.TOKEN && Shutdown('Token required.');
+Check(WH_NEWS_ID, 'News webhook id required.');
+Check(WH_NEWS_TOKEN, 'News webhook token required.');
+Check(STORAGE, 'Storage path required.');
+Check(TOKEN, 'Bot token required.');
 
 import Storage from './storage.js';
-import config from './config.js';
+import { HttpsGet } from './misc.js';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions } from 'discord-slim';
-import { HttpsGet } from './misc.js';
+
+const
+    dbPath = `${STORAGE}/app.db`,
+    AppState = Storage.Load(dbPath),
+    paramName = 'lastNewsTime';
+
+const SaveAppState = () =>
+    Storage.Save(AppState, dbPath);
+
+const requestOptions = {
+    authorization: new Authorization(TOKEN),
+    rateLimit: {
+        retryCount: 1,
+        callback: (response, attempts) =>
+            Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
+    },
+};
 
 const DecodeHtmlEntity = (() => {
     const
@@ -37,23 +59,9 @@ const DecodeHtmlEntity = (() => {
 
 const CleanupHtml = (str) => str.replace(/<\/?[^<>]*>/gm, '');
 
-const AppState = Storage.Load(config.storage.app);
-
-const SaveAppState = () =>
-    Storage.Save(AppState, config.storage.app);
-
-const paramName = 'lastNewsTime';
-
-const requestOptions = {
-    authorization: new Authorization(process.env.TOKEN),
-    rateLimit: {
-        retryCount: 1,
-        callback: (response, attempts) =>
-            Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
-    },
-};
-
 (async () => {
+    Logger.Log('News check job start.');
+
     const data = await HttpsGet('https://xgm.guru/rss').catch(Shutdown);
     if(!data?.length) Shutdown('No data received.');
 

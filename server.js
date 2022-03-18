@@ -1,0 +1,236 @@
+'use strict';
+
+import Logger from './log.js';
+import config from './config.js';
+import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL } from './process.js';
+import { ConnectedServers, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
+import { SyncUser, ClearUser } from './users.js';
+import { GenXgmUserLink, ReadIncomingData } from './misc.js';
+import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
+import { createServer } from 'http';
+
+const MESSAGE_MAX_CHARS = 2000;
+
+const SendPM = async (recipient_id, content) => {
+    const channel = await Actions.User.CreateDM({ recipient_id }).catch(Logger.Error);
+    if(!channel) return;
+    Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
+};
+
+const UpdateUserState = async (id, xgmid) => {
+    const
+        member = ConnectedServers.get(config.server)?.members.get(id),
+        ban = await Actions.Ban.Get(config.server, id).
+            then(() => true).
+            catch((e) => ((e.code == 404) || Logger.Error(e), false));
+
+    SyncUser(id, xgmid, ban, member).catch(Logger.Error);
+};
+
+const VerifyUser = async (code, xgmid) => {
+    const res = await Actions.OAuth2.TokenExchange({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: Helpers.OAuth2GrantTypes.AUTHORIZATION_CODE,
+        redirect_uri: REDIRECT_URL,
+        scope: Helpers.OAuth2Scopes.IDENTIFY,
+        code,
+    }).catch(Logger.Warn);
+
+    if(!res) {
+        Logger.Warn('Verify: token request failed.');
+        return { code: 400 };
+    }
+
+    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, Helpers.TokenTypes.BEARER) }).catch(Logger.Error);
+    if(!user) {
+        Logger.Warn('Verify: user request failed.');
+        return { code: 500 };
+    }
+
+    if(user.id == CLIENT_ID)
+        return { code: 418 };
+
+    let retCode;
+    const xid = AuthUsers.get(user.id);
+    if(xid) {
+        if(xid == xgmid) {
+            SendPM(user.id, 'Аккаунт уже подтвержден.');
+            retCode = 208;
+        } else {
+            AuthUsers.set(user.id, xgmid);
+            SaveAuthUsers();
+            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(xid)}>`);
+            SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
+            retCode = 200;
+        }
+    } else {
+        const prev = FindAuthUser(xgmid);
+        if(prev) {
+            Logger.Log(`Verify: remove ${user.id}`);
+            AuthUsers.delete(prev);
+            const member = ConnectedServers.get(config.server)?.members.get(prev);
+            member && ClearUser(member);
+        }
+
+        Logger.Log(`Verify: ${user.id} -> ${xgmid}`);
+        AuthUsers.set(user.id, xgmid);
+        SaveAuthUsers();
+
+        SendLogMsg(prev ?
+            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(prev)}` :
+            `Привязка аккаунта ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}`
+        );
+        SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
+
+        retCode = 200;
+    }
+
+    UpdateUserState(user.id, xgmid);
+
+    return { code: retCode, content: user.id };
+};
+
+const WH_SYSLOG_ID = process.env.WH_SYSLOG_ID, WH_SYSLOG_TOKEN = process.env.WH_SYSLOG_TOKEN;
+
+const SendSysLogMsg = async (content) => {
+    for(let i = 0; i < content.length; i += MESSAGE_MAX_CHARS)
+        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substring(i, i + MESSAGE_MAX_CHARS) });
+};
+
+const webApiFuncs = {
+    '/verify': async (request, response) => {
+        const
+            code = request.headers['code'],
+            xgmid = Number(request.headers['userid']);
+
+        if(!(code && (xgmid > 0)))
+            return response.statusCode = 400;
+
+        const ret = await VerifyUser(code, xgmid);
+        response.statusCode = ret.code;
+
+        if(!ret.content) return;
+        response.setHeader('Content-Length', Buffer.byteLength(ret.content));
+        response.write(ret.content);
+    },
+
+    '/delete': async (request, response) => {
+        const xgmid = Number(request.headers['userid']);
+        if(!(xgmid > 0)) return response.statusCode = 400;
+
+        const id = FindAuthUser(xgmid);
+        if(!id) return response.statusCode = 200;
+
+        if(id == CLIENT_ID)
+            return response.statusCode = 418;
+
+        Logger.Log(`Verify: delete! ${id}`);
+
+        AuthUsers.delete(id);
+        SaveAuthUsers();
+
+        const member = ConnectedServers.get(config.server)?.members.get(id);
+        member && ClearUser(member);
+
+        const
+            data = await ReadIncomingData(request),
+            reason = data ? `**Причина:** ${data}` : '';
+
+        SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(id)} :no_entry: ${GenXgmUserLink(xgmid)}\n${reason}`);
+        SendPM(id, `:no_entry: Аккаунт деавторизован.\n${reason}`);
+
+        response.statusCode = 200;
+    },
+
+    '/update-global-status': async (request, response) => {
+        const xgmid = Number(request.headers['userid']);
+        if(!(xgmid > 0)) return response.statusCode = 400;
+
+        Logger.Log(`S: ${xgmid} - '${request.headers['status']}'`);
+
+        const id = FindAuthUser(xgmid);
+        if(!id) return response.statusCode = 200;
+
+        if(id == CLIENT_ID)
+            return response.statusCode = 418;
+
+        UpdateUserState(id, xgmid);
+
+        response.statusCode = 200;
+    },
+
+    '/pm': async (request, response) => {
+        const xgmid = Number(request.headers['userid']);
+        if(!(xgmid > 0)) return response.statusCode = 400;
+
+        const id = FindAuthUser(xgmid);
+        if(!id) return response.statusCode = 404;
+
+        if(id == CLIENT_ID)
+            return response.statusCode = 418;
+
+        const data = await ReadIncomingData(request);
+        if(!data) return response.statusCode = 400;
+
+        SendPM(id, String(data).substring(0, MESSAGE_MAX_CHARS));
+
+        response.statusCode = 200;
+    },
+
+    '/send': async (request, response) => {
+        const channelid = request.headers['channelid'];
+        if(!channelid) return response.statusCode = 400;
+
+        const data = await ReadIncomingData(request);
+        if(!data) return response.statusCode = 400;
+
+        try {
+            await Actions.Message.Create(channelid, { content: String(data).substring(0, MESSAGE_MAX_CHARS) });
+        } catch(e) {
+            Logger.Error(e);
+            response.statusCode = e.code ?? 500;
+            return;
+        }
+
+        response.statusCode = 200;
+    },
+
+    '/sys': async (request, response) => {
+        const data = await ReadIncomingData(request);
+        if(!data) return response.statusCode = 400;
+
+        SendSysLogMsg(String(data)).catch(Logger.Error);
+        response.statusCode = 200;
+    },
+};
+
+const MAX_PAYLOAD = 8 * 1024;
+
+const HandleRequest = async (request, response) => {
+    const { method, headers, url } = request;
+    Logger.Log(`${method} '${url}'`);
+
+    if(method != 'POST')
+        return response.statusCode = 405;
+
+    if(headers['authorization'] != AUTH_SVC)
+        return response.statusCode = 401;
+
+    if(!webApiFuncs.hasOwnProperty(url))
+        return response.statusCode = 404;
+
+    if(Number(headers['content-length']) > MAX_PAYLOAD)
+        return response.statusCode = 413;
+
+    await webApiFuncs[url](request, response);
+};
+
+createServer(async (request, response) => {
+    await HandleRequest(request, response).catch((e) => {
+        Logger.Error(e);
+        response.statusCode = 500;
+    });
+    response.end();
+    Logger.Log(`Response end. Code: ${response.statusCode}`);
+}).listen(80);

@@ -2,30 +2,33 @@
 
 import Logger from './log.js';
 
-const Shutdown = (err) => {
-    Logger.Error(err);
+const Shutdown = (e) => {
+    Logger.Error(e);
     process.exit(1);
 };
 
 process.on('uncaughtException', Shutdown);
 process.on('unhandledRejection', Shutdown);
 
-!process.env.TOKEN && Shutdown('Token required.');
-!process.env.STORAGE && Shutdown('Storage path required.');
+export const {
+    TOKEN,
+    STORAGE,
+} = process.env;
 
-import { Authorization, Actions } from 'discord-slim';
+const Check = (value, message) => value || Shutdown(message);
+
+Check(TOKEN, 'Bot token required.');
+Check(STORAGE, 'Storage path required.');
+
 import Storage from './storage.js';
 import config from './config.js';
 import { SyncUser, ClearUser } from './users.js';
+import { Authorization, Actions } from 'discord-slim';
 
-const AuthUsers = Storage.Load(config.storage.users);
-
-const Members = new Map();
-
-const authorization = new Authorization(process.env.TOKEN);
+const MEMBERS_REQUEST_LIMIT = 1000;
 
 Actions.setDefaultRequestOptions({
-    authorization,
+    authorization: new Authorization(TOKEN),
     rateLimit: {
         retryCount: 3,
         callback: (response, attempts) =>
@@ -33,40 +36,16 @@ Actions.setDefaultRequestOptions({
     },
 });
 
-const SyncUsers = async () => {
-    Logger.Log('Syncing authorized users...');
-    try {
-        const bans = new Set();
-        for(const ban of await Actions.Guild.GetBans(config.server))
-            bans.add(ban.user.id);
-
-        for(const [id, xgmid] of AuthUsers)
-            await SyncUser(id, xgmid, bans.has(id), Members.get(id));
-    } catch(e) {
-        Logger.Error(e);
-    }
-
-    Logger.Log('Checking for revoked members...');
-    try {
-        for(const member of Members.values())
-            if(!AuthUsers.has(member.user.id))
-                await ClearUser(member);
-    } catch(e) {
-        Logger.Error(e);
-    }
-};
-
-const MEMBERS_REQUEST_LIMIT = 1000;
-
 const FetchMembers = async () => {
-    Logger.Log('Fetching members...');
+    const
+        result = new Map(),
+        query = { limit: MEMBERS_REQUEST_LIMIT };
 
-    const query = { limit: MEMBERS_REQUEST_LIMIT };
     while(true) {
         const members = await Actions.Guild.ListMembers(config.server, query);
 
         for(const member of members)
-            Members.set(member.user.id, member);
+            result.set(member.user.id, member);
 
         if(members.length < MEMBERS_REQUEST_LIMIT)
             break;
@@ -74,14 +53,41 @@ const FetchMembers = async () => {
         query.after = members[members.length - 1].user.id;
     }
 
-    Logger.Log(`Member count: ${Members.size}.`);
+    return result;
+};
+
+const SyncUsers = async (users, members) => {
+    const bans = new Set();
+    for(const ban of await Actions.Guild.GetBans(config.server))
+        bans.add(ban.user.id);
+
+    for(const [id, xgmid] of users)
+        await SyncUser(id, xgmid, bans.has(id), members.get(id));
+};
+
+const CheckRevoked = async (users, members) => {
+    for(const member of members.values())
+        if(!users.has(member.user.id))
+            await ClearUser(member);
 };
 
 (async () => {
     Logger.Log('Users sync job start.');
-    Logger.Log(`Authorized users: ${AuthUsers.size}.`);
-    await FetchMembers();
-    await SyncUsers();
+
+    Logger.Log('Loading storage...');
+    const users = Storage.Load(`${STORAGE}/users.db`);
+    Logger.Log(`Authorized users: ${users.size}.`);
+
+    Logger.Log('Fetching members...');
+    const members = await FetchMembers();
+    Logger.Log(`Member count: ${members.size}.`);
+
+    Logger.Log('Syncing authorized users...');
+    await SyncUsers().catch(Logger.Error);
+
+    Logger.Log('Checking for revoked members...');
+    await CheckRevoked().catch(Logger.Error);
+
     Logger.Log('Users sync job end.');
     process.exit();
 })();
