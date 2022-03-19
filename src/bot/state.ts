@@ -30,7 +30,7 @@ export const AddServer = ({ id, roles, channels }: Types.Guild) =>
     ConnectedServers.set(id, {
         id,
         roles: GenMap(roles),
-        members: new Map<string, Types.Member>(),
+        members: new Map(),
         channels: GenMap(channels),
     });
 

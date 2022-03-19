@@ -7,7 +7,11 @@ import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
 const
     EMBED_MESSAGE_COLOR = 16764928,
-    EMBED_ERROR_COLOR = 16716876;
+    EMBED_ERROR_COLOR = 16716876,
+    OPTION_USER = 'user',
+    OPTION_PUBLIC = 'public';
+
+let knownCommands: Set<string> | undefined;
 
 const GenUserInfoEmbeds = async (user?: Types.User) => {
     const embeds: Types.Embed[] = [];
@@ -83,27 +87,68 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     return embeds;
 };
 
-export const HandleInteraction = async (interaction: Types.Interaction) => {
-    if(interaction.type != Helpers.InteractionTypes.APPLICATION_COMMAND) return;
+const ExtractOption = ({ options }: Types.InteractionData, name: string) =>
+    options?.find((option) => option.name == name)?.value;
 
-    const
-        { data } = interaction,
-        user = interaction.member?.user ?? interaction.user;
-
+const ExtractInteractionData = async (data?: Types.InteractionData, user?: Types.User) => {
     if(!(data && user)) return;
-    if(!config.commands.includes(data.id)) return;
 
     Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
 
+    if(!knownCommands?.has(data.id)) return;
+
     const
-        targetId = data.options?.find((p) => p.name == 'user')?.value ?? data.target_id,
-        showPublic = Boolean(data.options?.find((p) => p.name == 'public')?.value);
+        target = String(ExtractOption(data, OPTION_USER) ?? data.target_id ?? ''),
+        show = Boolean(ExtractOption(data, OPTION_PUBLIC));
+
+    return {
+        embeds: await GenUserInfoEmbeds(data.resolved?.users?.[target] ?? user),
+        flags: show ? Helpers.MessageFlags.NO_FLAGS : Helpers.MessageFlags.EPHEMERAL,
+    };
+};
+
+export const HandleInteraction = async (interaction: Types.Interaction) => {
+    if(interaction.type != Helpers.InteractionTypes.APPLICATION_COMMAND) return;
+
+    const data = await ExtractInteractionData(interaction.data, interaction.member?.user ?? interaction.user);
+    if(!data) return;
 
     Actions.Application.CreateInteractionResponse(interaction.id, interaction.token, {
         type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-            embeds: await GenUserInfoEmbeds((typeof targetId == 'string') ? data.resolved?.users?.[targetId] : user),
-            flags: showPublic ? Helpers.MessageFlags.NO_FLAGS : Helpers.MessageFlags.EPHEMERAL,
-        },
+        data,
     }).catch(Logger.Error);
+};
+
+export const RegisterCommands = async (id: string) => {
+    if(knownCommands) return;
+    knownCommands = new Set();
+
+    const commands = await Actions.Application.BulkOverwriteGuildCommands(id, config.server, [
+        {
+            name: 'who',
+            description: 'Показать информацию о пользователе.',
+            options: [
+                {
+                    name: OPTION_USER,
+                    description: 'Пользователь',
+                    type: Helpers.ApplicationCommandOptionTypes.USER,
+                    required: false,
+                },
+                {
+                    name: OPTION_PUBLIC,
+                    description: 'Показать для всех',
+                    type: Helpers.ApplicationCommandOptionTypes.BOOLEAN,
+                    required: false,
+                },
+            ],
+        },
+        {
+            name: 'Идентификация',
+            type: Helpers.ApplicationCommandTypes.USER,
+            description: '',
+        },
+    ]);
+
+    for(const { id } of commands)
+        knownCommands.add(id);
 };

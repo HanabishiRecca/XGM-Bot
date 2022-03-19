@@ -5,8 +5,8 @@ import { GenMap } from '../util/misc.js';
 import { Shutdown } from './process.js';
 import { ConnectedServers, AuthUsers, AddServer, SendLogMsg, authorization } from './state.js';
 import { SetMarks, ReactionProc } from './marks.js';
-import { HandleInteraction } from './commands.js';
-import { Client, ClientEvents, Events, Actions, Helpers, Tools, Types } from 'discord-slim';
+import { RegisterCommands, HandleInteraction } from './commands.js';
+import { Client, ClientEvents, Events, Actions, Helpers, Tools } from 'discord-slim';
 
 const client = new Client();
 
@@ -28,8 +28,9 @@ const CheckUser = (id: string, flag: boolean) => {
     SyncUser(id, xgmid, flag, member).catch(Logger.Error);
 };
 
-client.events.on(Events.READY, () => {
+client.events.on(Events.READY, ({ user: { id } }) => {
     ConnectedServers.clear();
+    RegisterCommands(id);
     Logger.Log('READY');
 });
 
