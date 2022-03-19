@@ -1,5 +1,3 @@
-'use strict';
-
 import './process.js';
 import './client.js';
 import './server.js';

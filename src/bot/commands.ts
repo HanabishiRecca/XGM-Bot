@@ -1,18 +1,16 @@
-'use strict';
-
 import Logger from '../util/log.js';
 import config from '../util/config.js';
 import { RequestXgmUser } from '../util/users.js';
 import { GenXgmUserLink, GetUserCreationDate } from '../util/misc.js';
 import { AuthUsers } from './state.js';
-import { Actions, Helpers, Tools } from 'discord-slim';
+import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
 const
     EMBED_MESSAGE_COLOR = 16764928,
     EMBED_ERROR_COLOR = 16716876;
 
-const GenUserInfoEmbeds = async (user) => {
-    const embeds = [];
+const GenUserInfoEmbeds = async (user?: Types.User) => {
+    const embeds: Types.Embed[] = [];
 
     if(!user) {
         embeds.push({
@@ -85,7 +83,7 @@ const GenUserInfoEmbeds = async (user) => {
     return embeds;
 };
 
-export const HandleInteraction = async (interaction) => {
+export const HandleInteraction = async (interaction: Types.Interaction) => {
     if(interaction.type != Helpers.InteractionTypes.APPLICATION_COMMAND) return;
 
     const

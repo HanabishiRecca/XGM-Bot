@@ -1,23 +1,24 @@
-'use strict';
-
 import Logger from '../util/log.js';
 import config from '../util/config.js';
 import { SyncUser, ClearUser } from '../util/users.js';
-import { GenXgmUserLink, ReadIncomingData } from '../util/misc.js';
-import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL } from './process.js';
+import { ReadIncomingData } from '../util/request.js';
+import { GenXgmUserLink } from '../util/misc.js';
+import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process.js';
 import { ConnectedServers, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
-import { createServer } from 'http';
+import { createServer, IncomingMessage, ServerResponse } from 'http';
 
-const MESSAGE_MAX_CHARS = 2000;
+const
+    MAX_PAYLOAD = 8192,
+    MESSAGE_MAX_CHARS = 2000;
 
-const SendPM = async (recipient_id, content) => {
+const SendPM = async (recipient_id: string, content: string) => {
     const channel = await Actions.User.CreateDM({ recipient_id }).catch(Logger.Error);
     if(!channel) return;
     Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
 };
 
-const UpdateUserState = async (id, xgmid) => {
+const UpdateUserState = async (id: string, xgmid: number) => {
     const
         member = ConnectedServers.get(config.server)?.members.get(id),
         ban = await Actions.Ban.Get(config.server, id).
@@ -27,7 +28,7 @@ const UpdateUserState = async (id, xgmid) => {
     SyncUser(id, xgmid, ban, member).catch(Logger.Error);
 };
 
-const VerifyUser = async (code, xgmid) => {
+const VerifyUser = async (code: string, xgmid: number) => {
     const res = await Actions.OAuth2.TokenExchange({
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
@@ -91,20 +92,20 @@ const VerifyUser = async (code, xgmid) => {
     return { code: retCode, content: user.id };
 };
 
-const WH_SYSLOG_ID = process.env.WH_SYSLOG_ID, WH_SYSLOG_TOKEN = process.env.WH_SYSLOG_TOKEN;
-
-const SendSysLogMsg = async (content) => {
+const SendSysLogMsg = async (content: string) => {
     for(let i = 0; i < content.length; i += MESSAGE_MAX_CHARS)
         await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substring(i, i + MESSAGE_MAX_CHARS) });
 };
 
-const webApiFuncs = {
+const webApiFuncs: {
+    [key: string]: (request: IncomingMessage, response: ServerResponse) => void;
+} = {
     '/verify': async (request, response) => {
         const
             code = request.headers['code'],
             xgmid = Number(request.headers['userid']);
 
-        if(!(code && (xgmid > 0)))
+        if(!((typeof code == 'string') && (xgmid > 0)))
             return response.statusCode = 400;
 
         const ret = await VerifyUser(code, xgmid);
@@ -180,20 +181,16 @@ const webApiFuncs = {
 
     '/send': async (request, response) => {
         const channelid = request.headers['channelid'];
-        if(!channelid) return response.statusCode = 400;
+        if(typeof channelid != 'string')
+            return response.statusCode = 400;
 
         const data = await ReadIncomingData(request);
         if(!data) return response.statusCode = 400;
 
-        try {
-            await Actions.Message.Create(channelid, { content: String(data).substring(0, MESSAGE_MAX_CHARS) });
-        } catch(e) {
-            Logger.Error(e);
-            response.statusCode = e.code ?? 500;
-            return;
-        }
-
-        response.statusCode = 200;
+        response.statusCode =
+            await Actions.Message.Create(channelid, {
+                content: String(data).substring(0, MESSAGE_MAX_CHARS),
+            }).then(() => 200).catch((e) => (Logger.Error(e), e?.code ?? 500));
     },
 
     '/sys': async (request, response) => {
@@ -205,10 +202,9 @@ const webApiFuncs = {
     },
 };
 
-const MAX_PAYLOAD = 8 * 1024;
-
-const HandleRequest = async (request, response) => {
+const HandleRequest = async (request: IncomingMessage, response: ServerResponse) => {
     const { method, headers, url } = request;
+
     Logger.Log(`${method} '${url}'`);
 
     if(method != 'POST')
@@ -217,7 +213,7 @@ const HandleRequest = async (request, response) => {
     if(headers['authorization'] != AUTH_SVC)
         return response.statusCode = 401;
 
-    if(!webApiFuncs.hasOwnProperty(url))
+    if(!(url && webApiFuncs.hasOwnProperty(url)))
         return response.statusCode = 404;
 
     if(Number(headers['content-length']) > MAX_PAYLOAD)

@@ -63,6 +63,9 @@ typings/
 # VS Code environment
 .vscode
 
+# compiled
+app/
+
 # database
 storage/
 

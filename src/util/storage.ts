@@ -8,14 +8,14 @@ const
     RD_DYN_SIZE = 64;
 
 class DynamicBuffer {
-    _buffer = Buffer.allocUnsafe(RD_DYN_SIZE);
-    _length = 0;
+    private _buffer = Buffer.allocUnsafe(RD_DYN_SIZE);
+    private _length = 0;
 
-    push = (byte) => {
+    push = (byte: number) => {
         if((this._length + 1) > this._buffer.length) {
             const buffer = Buffer.allocUnsafe(this._buffer.length * 2);
             this._buffer.copy(buffer);
-            this.buffer = buffer;
+            this._buffer = buffer;
         }
 
         this._buffer[this._length++] = byte;
@@ -28,16 +28,16 @@ class DynamicBuffer {
     get length() { return this._length; }
 }
 
-export const Load = (path) => {
+export const Load = <K, V>(path: string) => {
     const
-        map = new Map(),
+        map = new Map<K, V>(),
         file = fs.openSync(path, O_RDONLY),
         buffer = Buffer.allocUnsafe(RD_BUFFER_SIZE),
         gen = new DynamicBuffer();
 
     const add = () => {
         if(gen.length < 1) return;
-        const [k, v] = JSON.parse(`[${gen.toString()}]`);
+        const [k, v] = JSON.parse(`[${gen.toString()}]`) as [K, V];
         map.set(k, v);
         gen.reset();
     };
@@ -54,7 +54,7 @@ export const Load = (path) => {
     return map;
 };
 
-export const Save = (map, path) => {
+export const Save = <K, V>(map: Map<K, V>, path: string) => {
     const
         tmp = `${path}.${randomUUID()}`,
         file = fs.openSync(tmp, WR_FLAGS);

@@ -1,14 +1,12 @@
-'use strict';
-
 import Logger from '../util/log.js';
 import config from '../util/config.js';
 import { SyncUser } from '../util/users.js';
 import { GenMap } from '../util/misc.js';
 import { Shutdown } from './process.js';
-import { ConnectedServers, AuthUsers, SendLogMsg, authorization } from './state.js';
+import { ConnectedServers, AuthUsers, AddServer, SendLogMsg, authorization } from './state.js';
 import { SetMarks, ReactionProc } from './marks.js';
 import { HandleInteraction } from './commands.js';
-import { Client, ClientEvents, Events, Actions, Helpers, Tools } from 'discord-slim';
+import { Client, ClientEvents, Events, Actions, Helpers, Tools, Types } from 'discord-slim';
 
 const client = new Client();
 
@@ -18,21 +16,17 @@ client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
-const CheckUser = (id, flag) => {
+const CheckUser = (id: string, flag: boolean) => {
+    if(id == client.user?.id) return;
+
+    const member = ConnectedServers.get(config.server)?.members.get(id);
+    if(member?.user?.bot) return;
+
     const xgmid = AuthUsers.get(id);
     if(!xgmid) return;
 
-    const member = ConnectedServers.get(config.server)?.members.get(id);
     SyncUser(id, xgmid, flag, member).catch(Logger.Error);
 };
-
-const AddServer = (server) =>
-    ConnectedServers.set(server.id, {
-        id: server.id,
-        roles: GenMap(server.roles),
-        members: new Map(),
-        channels: GenMap(server.channels),
-    });
 
 client.events.on(Events.READY, () => {
     ConnectedServers.clear();
@@ -58,6 +52,7 @@ client.events.on(Events.MESSAGE_CREATE, async (message) => {
 });
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
+    if(!member.user) return;
     const { guild_id, user: { id } } = member;
     ConnectedServers.get(guild_id)?.members.set(id, member);
 
@@ -67,7 +62,8 @@ client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
 });
 
 client.events.on(Events.GUILD_MEMBER_UPDATE, (member) => {
-    ConnectedServers.get(member.guild_id)?.members.set(member.user.id, member);
+    const current = ConnectedServers.get(member.guild_id)?.members.get(member.user.id);
+    current && Object.assign(current, member);
 });
 
 client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user: { id } }) => {
@@ -77,15 +73,8 @@ client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user: { id } }) => {
     SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mention.User(id)} покинул сервер.`);
 });
 
-client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) => {
-    if((reaction.guild_id != config.server) || (client.user.id == reaction.user_id)) return;
-    ReactionProc(reaction, true);
-});
-
-client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) => {
-    if((reaction.guild_id != config.server) || (client.user.id == reaction.user_id)) return;
-    ReactionProc(reaction, false);
-});
+client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) => ReactionProc(reaction, true));
+client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) => ReactionProc(reaction, false));
 
 client.events.on(Events.GUILD_CREATE, (server) => {
     AddServer(server);
@@ -115,19 +104,19 @@ client.events.on(Events.GUILD_DELETE, ({ unavailable, id }) =>
     !unavailable && ConnectedServers.delete(id));
 
 client.events.on(Events.GUILD_MEMBERS_CHUNK, ({ guild_id, members }) => {
-    const server = ConnectedServers.get(guild_id);
-    if(!server) return;
-
-    const sm = server.members;
+    const sm = ConnectedServers.get(guild_id)?.members;
+    if(!sm) return;
     for(const member of members)
-        sm.set(member.user.id, member);
+        member.user && sm.set(member.user.id, member);
 });
 
-const SetRoleData = ({ guild_id, role }) =>
-    ConnectedServers.get(guild_id)?.roles.set(role.id, role);
+client.events.on(Events.GUILD_ROLE_CREATE, ({ guild_id, role }) =>
+    ConnectedServers.get(guild_id)?.roles.set(role.id, role));
 
-client.events.on(Events.GUILD_ROLE_CREATE, SetRoleData);
-client.events.on(Events.GUILD_ROLE_UPDATE, SetRoleData);
+client.events.on(Events.GUILD_ROLE_UPDATE, ({ guild_id, role }) => {
+    const current = ConnectedServers.get(guild_id)?.roles.get(role.id);
+    current && Object.assign(current, role);
+});
 
 client.events.on(Events.GUILD_ROLE_DELETE, ({ guild_id, role_id }) =>
     ConnectedServers.get(guild_id)?.roles.delete(role_id));
@@ -138,14 +127,17 @@ client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user: { id } }) =>
 client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user: { id } }) =>
     (guild_id == config.server) && CheckUser(id, false));
 
-const SetChannelData = (channel) =>
-    ConnectedServers.get(channel.guild_id)?.channels.set(channel.id, channel);
+client.events.on(Events.CHANNEL_CREATE, (channel) =>
+    channel.guild_id && ConnectedServers.get(channel.guild_id)?.channels.set(channel.id, channel));
 
-client.events.on(Events.CHANNEL_CREATE, SetChannelData);
-client.events.on(Events.CHANNEL_UPDATE, SetChannelData);
+client.events.on(Events.CHANNEL_UPDATE, (channel) => {
+    if(!channel.guild_id) return;
+    const current = ConnectedServers.get(channel.guild_id)?.channels.get(channel.id);
+    current && Object.assign(current, channel);
+});
 
 client.events.on(Events.CHANNEL_DELETE, ({ guild_id, id }) =>
-    ConnectedServers.get(guild_id)?.channels.delete(id));
+    guild_id && ConnectedServers.get(guild_id)?.channels.delete(id));
 
 client.Connect(authorization, Helpers.Intents.SYSTEM
     | Helpers.Intents.GUILDS

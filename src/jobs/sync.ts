@@ -1,8 +1,6 @@
-'use strict';
-
 import Logger from '../util/log.js';
 
-const Shutdown = (e) => {
+const Shutdown = (e: any) => {
     Logger.Error(e);
     process.exit(1);
 };
@@ -10,20 +8,15 @@ const Shutdown = (e) => {
 process.on('uncaughtException', Shutdown);
 process.on('unhandledRejection', Shutdown);
 
-export const {
-    TOKEN,
-    STORAGE,
+const {
+    STORAGE = Shutdown('Storage path required.'),
+    TOKEN = Shutdown('Bot token required.'),
 } = process.env;
-
-const Check = (value, message) => value || Shutdown(message);
-
-Check(TOKEN, 'Bot token required.');
-Check(STORAGE, 'Storage path required.');
 
 import Storage from '../util/storage.js';
 import config from '../util/config.js';
 import { SyncUser, ClearUser } from '../util/users.js';
-import { Authorization, Actions } from 'discord-slim';
+import { Authorization, Actions, Types } from 'discord-slim';
 
 const MEMBERS_REQUEST_LIMIT = 1000;
 
@@ -38,25 +31,25 @@ Actions.setDefaultRequestOptions({
 
 const FetchMembers = async () => {
     const
-        result = new Map(),
-        query = { limit: MEMBERS_REQUEST_LIMIT };
+        result = new Map<string, Types.Member>(),
+        query: { limit: number; after?: string; } = { limit: MEMBERS_REQUEST_LIMIT };
 
     while(true) {
         const members = await Actions.Guild.ListMembers(config.server, query);
 
         for(const member of members)
-            result.set(member.user.id, member);
+            result.set(member.user!.id, member);
 
         if(members.length < MEMBERS_REQUEST_LIMIT)
             break;
 
-        query.after = members[members.length - 1].user.id;
+        query.after = members[members.length - 1].user!.id;
     }
 
     return result;
 };
 
-const SyncUsers = async (users, members) => {
+const SyncUsers = async (users: Map<string, number>, members: Map<string, Types.Member>) => {
     const bans = new Set();
     for(const ban of await Actions.Guild.GetBans(config.server))
         bans.add(ban.user.id);
@@ -65,9 +58,9 @@ const SyncUsers = async (users, members) => {
         await SyncUser(id, xgmid, bans.has(id), members.get(id));
 };
 
-const CheckRevoked = async (users, members) => {
+const CheckRevoked = async (users: Map<string, number>, members: Map<string, Types.Member>) => {
     for(const member of members.values())
-        if(!users.has(member.user.id))
+        if(!users.has(member.user!.id))
             await ClearUser(member);
 };
 
@@ -75,7 +68,7 @@ const CheckRevoked = async (users, members) => {
     Logger.Log('Users sync job start.');
 
     Logger.Log('Loading storage...');
-    const users = Storage.Load(`${STORAGE}/users.db`);
+    const users = Storage.Load<string, number>(`${STORAGE}/users.db`);
     Logger.Log(`Authorized users: ${users.size}.`);
 
     Logger.Log('Fetching members...');
@@ -88,6 +81,6 @@ const CheckRevoked = async (users, members) => {
     Logger.Log('Checking for revoked members...');
     await CheckRevoked(users, members).catch(Logger.Error);
 
-    Logger.Log('Users sync job end.');
+    Logger.Log('Users sync job finished.');
     process.exit();
 })();
