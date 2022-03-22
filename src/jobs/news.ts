@@ -111,8 +111,11 @@ const CheckNews = async (items: FeedItem[], lastTime: number) => {
         webhook = await Actions.Webhook.GetWithToken(WH_NEWS_ID, WH_NEWS_TOKEN),
         messages = await Actions.Channel.GetMessages(webhook.channel_id, { limit: items.length }, requestOptions);
 
-    for(const item of items) {
-        const message = messages.find(({ embeds }) => embeds?.[0]?.url == item.link);
+    for(const item of newItems) {
+        const message = item.link ?
+            messages.find(({ embeds }) => embeds?.[0]?.url == item.link) :
+            undefined;
+
         try {
             await PostItem(item, message);
         } catch(e) {
