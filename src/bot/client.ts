@@ -36,22 +36,6 @@ client.events.on(Events.READY, ({ user: { id } }) => {
 
 client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
-client.events.on(Events.MESSAGE_CREATE, async (message) => {
-    if(message.guild_id != config.server) return;
-
-    const channel = ConnectedServers.get(message.guild_id)?.channels.get(message.channel_id);
-    if(channel?.type != Helpers.ChannelTypes.GUILD_NEWS) return;
-
-    await Actions.Message.Crosspost(message.channel_id, message.id).catch(Logger.Error);
-
-    const title = message.embeds?.[0]?.title;
-    if(typeof title != 'string') return;
-
-    await Actions.Thread.StartWithMessage(message.channel_id, message.id, {
-        name: title.replace(/[\/\\]/g, '|'),
-    }).catch(Logger.Error);
-});
-
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
     if(!member.user) return;
     const { guild_id, user: { id } } = member;
@@ -144,6 +128,5 @@ client.Connect(authorization, Helpers.Intents.SYSTEM
     | Helpers.Intents.GUILDS
     | Helpers.Intents.GUILD_MEMBERS
     | Helpers.Intents.GUILD_BANS
-    | Helpers.Intents.GUILD_MESSAGES
     | Helpers.Intents.GUILD_MESSAGE_REACTIONS
 );

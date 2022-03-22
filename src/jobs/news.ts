@@ -24,20 +24,17 @@ const
     DB_PATH = `${STORAGE}/app.db`,
     FEED_URL = 'https://xgm.guru/rss',
     PARAM_NAME = 'lastNewsTime',
+    BACK_MESSAGES_LIMIT = 10,
     NEWS_COLOR = 16764928;
 
-const requestOptions = {
+Actions.setDefaultRequestOptions({
     authorization: new Authorization(TOKEN),
     rateLimit: {
         retryCount: 1,
-        callback: (response: {
-            message: string;
-            retry_after: number;
-            global: boolean;
-        }, attempts: number) =>
+        callback: (response, attempts) =>
             Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
     },
-};
+});
 
 const DecodeHtmlEntity = (() => {
     const
@@ -62,103 +59,124 @@ type FeedItem = {
     enclosure: {
         url: string;
     };
-    __dt?: Date;
+};
+
+type ItemInfo = {
+    item: FeedItem;
+    date: Date;
 };
 
 const FetchFeed = async () => {
     const data = await HttpsGet(FEED_URL);
-    if(!data?.length) return Shutdown('No feed data received.');
+    if(!data) throw 'No feed data received.';
 
     const items = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: '',
-    }).parse(data)?.rss?.channel?.item as FeedItem[] || undefined;
+    }).parse(data)?.rss?.channel?.item as FeedItem[] | undefined;
 
-    return items?.length ?
-        items.reverse() : Shutdown('Incorrect feed data received.');
+    if(!items) throw 'Incorrect feed data received.';
+
+    return items;
 };
 
-const PostItem = async (item: FeedItem, message?: Types.Message) => {
-    const embed: Types.Embed = {
-        title: DecodeHtmlEntity(item.title),
-        description: CleanupHtml(DecodeHtmlEntity(item.description)),
-        url: item.link,
-        footer: {
-            text: item.author,
-        },
-        timestamp: item.__dt?.toISOString(),
-        color: NEWS_COLOR,
-        image: {
-            url: item.enclosure?.url,
-        },
-    };
+const GenEmbed = ({ item, date }: ItemInfo) => ({
+    title: DecodeHtmlEntity(item.title),
+    description: CleanupHtml(DecodeHtmlEntity(item.description)),
+    url: item.link,
+    footer: {
+        text: item.author,
+    },
+    timestamp: date.toISOString(),
+    color: NEWS_COLOR,
+    image: {
+        url: item.enclosure?.url,
+    },
+});
 
-    const param = { embeds: [embed] };
+const EditMessage = (info: ItemInfo, id: string) =>
+    Actions.Webhook.EditMessage(WH_NEWS_ID, WH_NEWS_TOKEN, id, {
+        embeds: [GenEmbed(info)],
+    });
 
-    message ?
-        await Actions.Webhook.EditMessage(WH_NEWS_ID, WH_NEWS_TOKEN, message.id, param) :
-        await Actions.Webhook.Execute(WH_NEWS_ID, WH_NEWS_TOKEN, param);
+const PostMessage = async (info: ItemInfo) => {
+    const embed = GenEmbed(info);
+
+    const { id, channel_id } = await Actions.Webhook.Execute(
+        WH_NEWS_ID,
+        WH_NEWS_TOKEN,
+        { embeds: [embed] },
+        { wait: true },
+    ) as Types.Message;
+
+    await Actions.Message.Crosspost(channel_id, id).catch(Logger.Error);
+
+    await Actions.Thread.StartWithMessage(channel_id, id, {
+        name: embed.title.replace(/[\/\\]/g, '|'),
+    }).catch(Logger.Error);
 };
 
-const CheckNews = async (items: FeedItem[], lastTime: number) => {
-    const newItems = items.filter((item) =>
-        (item.__dt = new Date(item.pubDate)).getTime() > lastTime);
-
-    if(newItems.length < 1)
-        return lastTime;
-
+const PostNews = async (infos: ItemInfo[]) => {
     const
         webhook = await Actions.Webhook.GetWithToken(WH_NEWS_ID, WH_NEWS_TOKEN),
-        messages = await Actions.Channel.GetMessages(webhook.channel_id, { limit: items.length }, requestOptions);
+        messages = await Actions.Channel.GetMessages(webhook.channel_id, { limit: BACK_MESSAGES_LIMIT });
 
-    for(const item of newItems) {
-        const message = item.link ?
-            messages.find(({ embeds }) => embeds?.[0]?.url == item.link) :
-            undefined;
+    const FindExisting = (link: string) => {
+        if(!link) return;
+        return messages.find(({ embeds }) => embeds?.[0]?.url == link)?.id;
+    };
 
-        try {
-            await PostItem(item, message);
-        } catch(e) {
-            Logger.Error(e);
-            break;
-        }
-
-        const time = item.__dt?.getTime() ?? 0;
-        if(time > lastTime)
-            lastTime = time;
+    for(const info of infos) {
+        const id = FindExisting(info.item.link);
+        await (id ?
+            EditMessage(info, id) :
+            PostMessage(info)
+        );
     }
-
-    return lastTime;
 };
 
-(async () => {
-    Logger.Log('News check job start.');
-
-    Logger.Log('Loading data...');
-    const app = Storage.Load<string, number>(DB_PATH);
+const CheckNews = async (checkTime?: number) => {
+    if(!checkTime) return Date.now();
 
     Logger.Log('Fetching rss feed...');
     const items = await FetchFeed();
 
-    const lastTime = app.get(PARAM_NAME);
-    let needSave = false;
+    Logger.Log('Processing feed...');
 
-    if(lastTime) {
-        Logger.Log('Processing feed...');
-        const time = await CheckNews(items, lastTime);
-        if(needSave = (time > lastTime))
-            app.set(PARAM_NAME, time);
-    } else {
-        Logger.Warn('Last check timestamp not found.');
-        app.set(PARAM_NAME, Date.now());
-        needSave = true;
-    }
+    const infos = items.map((item) => ({
+        date: new Date(item.pubDate),
+        item,
+    } as ItemInfo)).filter(
+        ({ date }) => date.getTime() > checkTime,
+    ).reverse();
 
-    if(needSave) {
-        Logger.Log('Saving data...');
-        Storage.Save(app, DB_PATH);
-    }
+    Logger.Log(`News count: ${infos.length}`);
+    if(!infos.length) return;
 
+    Logger.Log('Posting...');
+    await PostNews(infos);
+
+    return infos.reduce(
+        (time, { date }) => Math.max(time, date.getTime()),
+        checkTime,
+    );
+};
+
+const StartJob = async () => {
+    Logger.Log('Loading data...');
+    const app = Storage.Load<string, number>(DB_PATH);
+
+    const result = await CheckNews(app.get(PARAM_NAME));
+    if(!result) return;
+
+    Logger.Log('Saving data...');
+    app.set(PARAM_NAME, result);
+    Storage.Save(app, DB_PATH);
+};
+
+(async () => {
+    Logger.Log('News check job start.');
+    await StartJob();
     Logger.Log('News check job finished.');
     process.exit();
 })();
