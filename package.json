@@ -12,7 +12,7 @@
         "start": "node --expose-gc ."
     },
     "dependencies": {
-        "discord-slim": "2.5.*",
+        "discord-slim": "2.6.*",
         "fast-xml-parser": "4.0.*"
     },
     "devDependencies": {
