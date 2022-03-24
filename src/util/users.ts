@@ -2,6 +2,10 @@ import config from './config.js';
 import { HttpsGet } from './request.js';
 import { Actions, Types } from 'discord-slim';
 
+export const
+    GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}`,
+    GetUserCreationDate = (user_id: string) => Number(BigInt(user_id) >> 22n) + 1420070400000;
+
 const HasRole = (member: Types.Member, role_id: string) =>
     member.roles.indexOf(role_id) > -1;
 

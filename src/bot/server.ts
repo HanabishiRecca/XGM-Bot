@@ -1,10 +1,9 @@
 import Logger from '../util/log.js';
 import config from '../util/config.js';
-import { SyncUser, ClearUser } from '../util/users.js';
+import { SyncUser, ClearUser, GenXgmUserLink } from '../util/users.js';
 import { ReadIncomingData } from '../util/request.js';
-import { GenXgmUserLink } from '../util/misc.js';
 import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process.js';
-import { ConnectedServers, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
+import { AuthUsers, SaveAuthUsers, FindAuthUser, GetServer, SendLogMsg } from './state.js';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 
@@ -20,7 +19,7 @@ const SendPM = async (recipient_id: string, content: string) => {
 
 const UpdateUserState = async (id: string, xgmid: number) => {
     const
-        member = ConnectedServers.get(config.server)?.members.get(id),
+        member = GetServer(config.server)?.members.get(id),
         ban = await Actions.Ban.Get(config.server, id).
             then(() => true).
             catch((e) => ((e.code == 404) || Logger.Error(e), false));
@@ -70,7 +69,7 @@ const VerifyUser = async (code: string, xgmid: number) => {
         if(prev) {
             Logger.Log(`Verify: remove ${user.id}`);
             AuthUsers.delete(prev);
-            const member = ConnectedServers.get(config.server)?.members.get(prev);
+            const member = GetServer(config.server)?.members.get(prev);
             member && ClearUser(member);
         }
 
@@ -131,7 +130,7 @@ const webApiFuncs: {
         AuthUsers.delete(id);
         SaveAuthUsers();
 
-        const member = ConnectedServers.get(config.server)?.members.get(id);
+        const member = GetServer(config.server)?.members.get(id);
         member && ClearUser(member);
 
         const

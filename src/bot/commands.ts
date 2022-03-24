@@ -1,7 +1,6 @@
 import Logger from '../util/log.js';
 import config from '../util/config.js';
-import { RequestXgmUser } from '../util/users.js';
-import { GenXgmUserLink, GetUserCreationDate } from '../util/misc.js';
+import { RequestXgmUser, GenXgmUserLink, GetUserCreationDate } from '../util/users.js';
 import { AuthUsers } from './state.js';
 import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
