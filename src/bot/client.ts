@@ -5,7 +5,7 @@ import { Shutdown } from './process.js';
 import { AuthUsers, AddServer, GetServer, RemoveServer, RemoveAllServers, SendLogMsg, authorization } from './state.js';
 import { SetMarks, ReactionProc } from './marks.js';
 import { RegisterCommands, HandleInteraction } from './commands.js';
-import { Client, ClientEvents, Events, Helpers, Tools } from 'discord-slim';
+import { Client, ClientEvents, Events, Helpers, Tools, Types } from 'discord-slim';
 
 const client = new Client();
 
@@ -46,8 +46,9 @@ client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
 });
 
 client.events.on(Events.GUILD_MEMBER_UPDATE, (member) => {
-    const current = GetServer(member.guild_id)?.members.get(member.user.id);
-    current && Object.assign(current, member);
+    const { guild_id, user: { id } } = member;
+    GetServer(guild_id)?.members.set(id, member as Types.Member);
+    CheckUser(id, false);
 });
 
 client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user: { id } }) => {
