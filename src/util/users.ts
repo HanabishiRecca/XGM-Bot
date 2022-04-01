@@ -1,3 +1,4 @@
+import Logger from './log.js';
 import config from './config.js';
 import { HttpsGet } from './request.js';
 import { Actions, Types } from 'discord-slim';
@@ -79,11 +80,22 @@ export const RequestXgmUser = async (xgmid: number) => {
 export const SyncUser = async (id: string, xgmid: number, banned: boolean, member?: Types.Member) => {
     if(member?.user?.bot) return;
 
-    const
-        { info, state } = await RequestXgmUser(xgmid),
-        status = state.access.staff_status;
+    const {
+        info: {
+            user: {
+                username,
+                seeTwilight,
+            },
+        },
+        state: {
+            access: {
+                staff_status,
+            },
+            projects,
+        },
+    } = await RequestXgmUser(xgmid);
 
-    if(status == 'suspended') {
+    if(staff_status == 'suspended') {
         if(!banned)
             await Actions.Ban.Add(config.server, id);
         return;
@@ -93,12 +105,23 @@ export const SyncUser = async (id: string, xgmid: number, banned: boolean, membe
         await Actions.Ban.Remove(config.server, id);
 
     if(!member) return;
+    const { user } = member;
+    if(!user) return;
 
-    await RoleSwitch(member, config.role.readonly, status == 'readonly');
+    await RoleSwitch(member, config.role.readonly, staff_status == 'readonly');
     await RoleSwitch(member, config.role.user, true);
-    await RoleSwitch(member, config.role.staff, IsInProject(status));
-    await RoleSwitch(member, config.role.team, IsInProject(state.projects['833']?.status));
-    await RoleSwitch(member, config.role.twilight, info.user.seeTwilight);
+    await RoleSwitch(member, config.role.staff, IsInProject(staff_status));
+    await RoleSwitch(member, config.role.team, IsInProject(projects['833']?.status));
+    await RoleSwitch(member, config.role.twilight, seeTwilight);
+
+    if(member.nick) {
+        if(member.nick == username) return;
+    } else {
+        if(user.username == username) return;
+    }
+
+    await Actions.Member.Modify(config.server, user.id, { nick: username }).
+        catch(() => Logger.Warn(`Can't change a nickname for ${user.username}#${user.discriminator}`));
 };
 
 export const ClearUser = async (member: Types.Member) => {
