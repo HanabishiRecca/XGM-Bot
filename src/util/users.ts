@@ -77,9 +77,7 @@ export const RequestXgmUser = async (xgmid: number) => {
     return JSON.parse(String(data)) as XgmUser;
 };
 
-export const SyncUser = async (id: string, xgmid: number, banned: boolean, member?: Types.Member) => {
-    if(member?.user?.bot) return;
-
+const DoSync = async (id: string, xgmid: number, banned: boolean, member?: Types.Member) => {
     const {
         info: {
             user: {
@@ -124,10 +122,39 @@ export const SyncUser = async (id: string, xgmid: number, banned: boolean, membe
         catch(() => Logger.Warn(`Can't change a nickname for ${user.username}#${user.discriminator}`));
 };
 
+const syncLock = new Set<string>();
+
+export const SyncUser = async (id: string, xgmid: number, banned: boolean, member?: Types.Member) => {
+    if(member?.user?.bot) return;
+
+    if(syncLock.has(id)) return;
+    syncLock.add(id);
+
+    try {
+        await DoSync(id, xgmid, banned, member);
+    } catch(e) {
+        throw e;
+    } finally {
+        syncLock.delete(id);
+    }
+};
+
 export const ClearUser = async (member: Types.Member) => {
-    await RoleSwitch(member, config.role.readonly, false);
-    await RoleSwitch(member, config.role.user, false);
-    await RoleSwitch(member, config.role.staff, false);
-    await RoleSwitch(member, config.role.team, false);
-    await RoleSwitch(member, config.role.twilight, false);
+    if(!member.user || member.user.bot) return;
+
+    const { user: { id } } = member;
+    if(syncLock.has(id)) return;
+    syncLock.add(id);
+
+    try {
+        await RoleSwitch(member, config.role.readonly, false);
+        await RoleSwitch(member, config.role.user, false);
+        await RoleSwitch(member, config.role.staff, false);
+        await RoleSwitch(member, config.role.team, false);
+        await RoleSwitch(member, config.role.twilight, false);
+    } catch(e) {
+        throw e;
+    } finally {
+        syncLock.delete(id);
+    }
 };
