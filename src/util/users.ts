@@ -7,23 +7,35 @@ export const
     GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}`,
     GetUserCreationDate = (user_id: string) => Number(BigInt(user_id) >> 22n) + 1420070400000;
 
-const HasRole = ({ roles }: Pick<Types.Member, 'roles'>, id: string) =>
-    roles.indexOf(id) > -1;
+export type MemberPart = Pick<Types.Member, 'user'> & Partial<Pick<Types.Member, 'roles' | 'nick'>>;
 
 const IsInProject = (status?: string | null) =>
     Boolean(status) && ((status == 'active') || (status == 'moderator') || (status == 'leader'));
 
-const RoleSwitch = async (member: Pick<Types.Member, 'user' | 'roles'>, role: string, enable: boolean) => {
-    const f = enable ?
-        (HasRole(member, role) ? null : Actions.Member.AddRole) :
-        (HasRole(member, role) ? Actions.Member.RemoveRole : null);
-
-    await f?.(config.server, member.user.id, role);
+const SetRole = async ({ user: { id }, roles }: MemberPart, role: string, enable: boolean) => {
+    if(!roles) return;
+    roles.includes(role) ?
+        enable || await Actions.Member.RemoveRole(config.server, id, role) :
+        enable && await Actions.Member.AddRole(config.server, id, role);
 };
 
-const SetNick = ({ id, username, discriminator }: Types.User, nick: string | null) =>
+const knownRoles = [
+    config.role.readonly,
+    config.role.user,
+    config.role.staff,
+    config.role.team,
+    config.role.twilight,
+];
+
+const SetRoles = async (member: MemberPart, flags?: boolean[]) => {
+    let index = 0;
+    for(const role of knownRoles)
+        await SetRole(member, role, flags?.[index++] ?? false);
+};
+
+const SetNick = (id: string, nick: string | null) =>
     Actions.Member.Modify(config.server, id, { nick }).
-        catch(() => Logger.Warn(`Can't change a nickname for ${username}#${discriminator}`));
+        catch(() => Logger.Warn(`Can't change a nickname for ${id}.`));
 
 type XgmUser = {
     info: {
@@ -73,19 +85,17 @@ type XgmUser = {
     timeElapsedSec: number;
 };
 
-type MemberPart = Pick<Types.Member, 'user' | 'roles' | 'nick'>;
-
 export const RequestXgmUser = async (xgmid: number) => {
     const data = await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`);
     if(!data) throw 'Empty user response!';
     return JSON.parse(String(data)) as XgmUser;
 };
 
-const DoSync = async (id: string, xgmid: number, banned: boolean, member?: MemberPart) => {
+const DoSync = async (member: MemberPart, xgmid: number, banned: boolean) => {
     const {
         info: {
             user: {
-                username,
+                username: xgmname,
                 seeTwilight,
             },
         },
@@ -97,44 +107,40 @@ const DoSync = async (id: string, xgmid: number, banned: boolean, member?: Membe
         },
     } = await RequestXgmUser(xgmid);
 
+    const { user: { id, username }, roles, nick } = member;
+
     if(staff_status == 'suspended') {
-        if(!banned)
-            await Actions.Ban.Add(config.server, id);
+        banned || await Actions.Ban.Add(config.server, id);
         return;
     }
 
-    if(banned)
+    if(banned) {
         await Actions.Ban.Remove(config.server, id);
-
-    if(!member) return;
-    const { user } = member;
-    if(!user) return;
-
-    await RoleSwitch(member, config.role.readonly, staff_status == 'readonly');
-    await RoleSwitch(member, config.role.user, true);
-    await RoleSwitch(member, config.role.staff, IsInProject(staff_status));
-    await RoleSwitch(member, config.role.team, IsInProject(projects['833']?.status));
-    await RoleSwitch(member, config.role.twilight, seeTwilight);
-
-    if(member.nick) {
-        if(member.nick == username) return;
-    } else {
-        if(user.username == username) return;
+        return;
     }
 
-    await SetNick(user, username);
+    if(!roles) return;
+    await SetRoles(member, [
+        staff_status == 'readonly',
+        true,
+        IsInProject(staff_status),
+        IsInProject(projects['833']?.status),
+        seeTwilight,
+    ]);
+
+    if((nick == xgmname) && (username == xgmname)) return;
+    await SetNick(id, xgmname);
 };
 
 const syncLock = new Set<string>();
 
-export const SyncUser = async (id: string, xgmid: number, banned: boolean, member?: MemberPart) => {
-    if(member?.user.bot) return;
-
+export const SyncUser = async (member: MemberPart, xgmid: number, banned: boolean) => {
+    const { user: { id } } = member;
     if(syncLock.has(id)) return;
     syncLock.add(id);
 
     try {
-        await DoSync(id, xgmid, banned, member);
+        await DoSync(member, xgmid, banned);
     } catch(e) {
         throw e;
     } finally {
@@ -142,25 +148,16 @@ export const SyncUser = async (id: string, xgmid: number, banned: boolean, membe
     }
 };
 
-export const ClearUser = async (member?: MemberPart) => {
-    if(!member) return;
+export const ClearUser = async (member: MemberPart) => {
+    const { user: { id }, roles } = member;
+    if(!roles) return;
 
-    const { user } = member;
-    if(user.bot) return;
-
-    const { id } = user;
     if(syncLock.has(id)) return;
     syncLock.add(id);
 
     try {
-        await RoleSwitch(member, config.role.readonly, false);
-        await RoleSwitch(member, config.role.user, false);
-        await RoleSwitch(member, config.role.staff, false);
-        await RoleSwitch(member, config.role.team, false);
-        await RoleSwitch(member, config.role.twilight, false);
-
-        if(member.nick)
-            await SetNick(user, null);
+        await SetRoles(member);
+        member.nick && await SetNick(id, null);
     } catch(e) {
         throw e;
     } finally {

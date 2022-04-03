@@ -1,6 +1,6 @@
 import Logger from '../util/log.js';
 import config from '../util/config.js';
-import { SyncUser, ClearUser } from '../util/users.js';
+import { SyncUser, ClearUser, MemberPart } from '../util/users.js';
 import { Shutdown } from './process.js';
 import { AuthUsers, SendLogMsg, authorization } from './state.js';
 import { SetMarks, ReactionProc } from './marks.js';
@@ -17,21 +17,12 @@ client.on(ClientEvents.FATAL, Shutdown);
 
 const IsServer = (id?: string) => id == config.server;
 
-const CheckUser = (user: Types.User, banned: boolean, member?: Pick<Types.Member, 'roles' | 'nick'>) => {
-    if(!user) return;
-    const { id, bot } = user;
-    if(bot) return;
-
-    const part = member ? {
-        user,
-        roles: member.roles,
-        nick: member.nick,
-    } : undefined;
-
-    const xgmid = AuthUsers.get(id);
+const CheckUser = (member: MemberPart, banned: boolean) => {
+    if(member.user.bot) return;
+    const xgmid = AuthUsers.get(member.user.id);
     (xgmid ?
-        SyncUser(id, xgmid, banned, part) :
-        ClearUser(part)
+        SyncUser(member, xgmid, banned) :
+        ClearUser(member)
     ).catch(Logger.Error);
 };
 
@@ -43,17 +34,14 @@ client.events.on(Events.READY, ({ user: { id } }) => {
 client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
-    const { guild_id, user } = member;
-    if(!IsServer(guild_id)) return;
-    SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mention.User(user)} присоединился к серверу.`);
-    CheckUser(user, false, member);
+    if(!IsServer(member.guild_id)) return;
+    SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mention.User(member.user)} присоединился к серверу.`);
+    CheckUser(member, false);
 });
 
-client.events.on(Events.GUILD_MEMBER_UPDATE, (member) => {
-    const { guild_id, user } = member;
-    if(!IsServer(guild_id)) return;
-    CheckUser(user, false, member);
-});
+client.events.on(Events.GUILD_MEMBER_UPDATE, (member) =>
+    IsServer(member.guild_id) &&
+    CheckUser(member, false));
 
 client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user }) =>
     IsServer(guild_id) &&
@@ -73,11 +61,11 @@ client.events.on(Events.GUILD_CREATE, ({ id, emojis }) =>
 
 client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user }) =>
     IsServer(guild_id) &&
-    CheckUser(user, true));
+    CheckUser({ user }, true));
 
 client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user }) =>
     IsServer(guild_id) &&
-    CheckUser(user, false));
+    CheckUser({ user }, false));
 
 client.Connect(authorization, Helpers.Intents.SYSTEM
     | Helpers.Intents.GUILDS

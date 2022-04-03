@@ -50,12 +50,20 @@ const FetchMembers = async () => {
 };
 
 const SyncUsers = async (users: Map<string, number>, members: Map<string, Types.Member>) => {
-    const bans = new Set();
-    for(const ban of await Actions.Guild.GetBans(config.server))
-        bans.add(ban.user.id);
+    const bans = new Map<string, Types.User>();
+    for(const { user } of await Actions.Guild.GetBans(config.server))
+        bans.set(user.id, user);
 
-    for(const [id, xgmid] of users)
-        await SyncUser(id, xgmid, bans.has(id), members.get(id));
+    for(const [id, xgmid] of users) {
+        const
+            member = members.get(id),
+            user = bans.get(id);
+
+        if(member)
+            await SyncUser(member, xgmid, Boolean(user));
+        else if(user)
+            await SyncUser({ user }, xgmid, true);
+    }
 };
 
 const CheckRevoked = async (users: Map<string, number>, members: Map<string, Types.Member>) => {
