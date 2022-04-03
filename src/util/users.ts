@@ -19,17 +19,9 @@ const SetRole = async ({ user: { id }, roles }: MemberPart, role: string, enable
         enable && await Actions.Member.AddRole(config.server, id, role);
 };
 
-const knownRoles = [
-    config.role.readonly,
-    config.role.user,
-    config.role.staff,
-    config.role.team,
-    config.role.twilight,
-];
-
 const SetRoles = async (member: MemberPart, flags?: boolean[]) => {
     let index = 0;
-    for(const role of knownRoles)
+    for(const role of config.roles)
         await SetRole(member, role, flags?.[index++] ?? false);
 };
 
