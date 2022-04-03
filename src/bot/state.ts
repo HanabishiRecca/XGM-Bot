@@ -1,7 +1,7 @@
 import Logger from '../util/log.js';
 import Storage from '../util/storage.js';
 import { STORAGE, TOKEN, WH_LOG_ID, WH_LOG_TOKEN } from './process.js';
-import { Authorization, Actions, Types } from 'discord-slim';
+import { Authorization, Actions } from 'discord-slim';
 
 const dbPath = `${STORAGE}/users.db`;
 
@@ -15,34 +15,6 @@ export const FindAuthUser = (value: number) => {
         if(value == v)
             return k;
 };
-
-type Server = {
-    id: string;
-    members: Map<string, Types.Member>;
-};
-
-const ConnectedServers = new Map<string, Server>();
-
-export const AddServer = ({ id }: Types.Guild) => {
-    if(!id) return;
-    ConnectedServers.set(id, {
-        id,
-        members: new Map(),
-    });
-};
-
-export const GetServer = (id?: string) => {
-    if(!id) return;
-    return ConnectedServers.get(id);
-};
-
-export const RemoveServer = (id?: string) => {
-    if(!id) return;
-    ConnectedServers.delete(id);
-};
-
-export const RemoveAllServers = () =>
-    ConnectedServers.clear();
 
 export const authorization = new Authorization(TOKEN);
 

@@ -7,21 +7,23 @@ export const
     GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}`,
     GetUserCreationDate = (user_id: string) => Number(BigInt(user_id) >> 22n) + 1420070400000;
 
-const HasRole = (member: Types.Member, role_id: string) =>
-    member.roles.indexOf(role_id) > -1;
+const HasRole = ({ roles }: Pick<Types.Member, 'roles'>, id: string) =>
+    roles.indexOf(id) > -1;
 
 const IsInProject = (status?: string | null) =>
-    Boolean(status && ((status == 'leader') || (status == 'moderator') || (status == 'active')));
+    Boolean(status) && ((status == 'active') || (status == 'moderator') || (status == 'leader'));
 
-const RoleSwitch = async (member: Types.Member, role: string, enable: boolean) => {
-    if(!(member.user && role)) return;
-
+const RoleSwitch = async (member: Pick<Types.Member, 'user' | 'roles'>, role: string, enable: boolean) => {
     const f = enable ?
         (HasRole(member, role) ? null : Actions.Member.AddRole) :
         (HasRole(member, role) ? Actions.Member.RemoveRole : null);
 
     await f?.(config.server, member.user.id, role);
 };
+
+const SetNick = ({ id, username, discriminator }: Types.User, nick: string | null) =>
+    Actions.Member.Modify(config.server, id, { nick }).
+        catch(() => Logger.Warn(`Can't change a nickname for ${username}#${discriminator}`));
 
 type XgmUser = {
     info: {
@@ -71,13 +73,15 @@ type XgmUser = {
     timeElapsedSec: number;
 };
 
+type MemberPart = Pick<Types.Member, 'user' | 'roles' | 'nick'>;
+
 export const RequestXgmUser = async (xgmid: number) => {
     const data = await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`);
     if(!data) throw 'Empty user response!';
     return JSON.parse(String(data)) as XgmUser;
 };
 
-const DoSync = async (id: string, xgmid: number, banned: boolean, member?: Types.Member) => {
+const DoSync = async (id: string, xgmid: number, banned: boolean, member?: MemberPart) => {
     const {
         info: {
             user: {
@@ -118,14 +122,13 @@ const DoSync = async (id: string, xgmid: number, banned: boolean, member?: Types
         if(user.username == username) return;
     }
 
-    await Actions.Member.Modify(config.server, user.id, { nick: username }).
-        catch(() => Logger.Warn(`Can't change a nickname for ${user.username}#${user.discriminator}`));
+    await SetNick(user, username);
 };
 
 const syncLock = new Set<string>();
 
-export const SyncUser = async (id: string, xgmid: number, banned: boolean, member?: Types.Member) => {
-    if(member?.user?.bot) return;
+export const SyncUser = async (id: string, xgmid: number, banned: boolean, member?: MemberPart) => {
+    if(member?.user.bot) return;
 
     if(syncLock.has(id)) return;
     syncLock.add(id);
@@ -139,10 +142,13 @@ export const SyncUser = async (id: string, xgmid: number, banned: boolean, membe
     }
 };
 
-export const ClearUser = async (member: Types.Member) => {
-    if(!member.user || member.user.bot) return;
+export const ClearUser = async (member?: MemberPart) => {
+    if(!member) return;
 
-    const { user: { id } } = member;
+    const { user } = member;
+    if(user.bot) return;
+
+    const { id } = user;
     if(syncLock.has(id)) return;
     syncLock.add(id);
 
@@ -152,6 +158,9 @@ export const ClearUser = async (member: Types.Member) => {
         await RoleSwitch(member, config.role.staff, false);
         await RoleSwitch(member, config.role.team, false);
         await RoleSwitch(member, config.role.twilight, false);
+
+        if(member.nick)
+            await SetNick(user, null);
     } catch(e) {
         throw e;
     } finally {

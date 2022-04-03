@@ -12,14 +12,14 @@ type Reaction = {
     emoji: Types.Emoji;
 };
 
-export const ReactionProc = ({ guild_id, user_id, channel_id, message_id, emoji: { id } }: Reaction, add: boolean) => {
-    if(!id || (guild_id != config.server) || (user_id == CLIENT_ID)) return;
+export const ReactionProc = ({ user_id, channel_id, message_id, emoji: { id } }: Reaction, add: boolean) => {
+    if(!id || (user_id == CLIENT_ID)) return;
 
     const role = config.marks[channel_id]?.[message_id]?.[id];
     if(!role) return;
 
     const f = add ? Actions.Member.AddRole : Actions.Member.RemoveRole;
-    f(guild_id, user_id, role).catch(Logger.Error);
+    f(config.server, user_id, role).catch(Logger.Error);
 };
 
 let marksSet = false;

@@ -3,7 +3,7 @@ import config from '../util/config.js';
 import { SyncUser, ClearUser, GenXgmUserLink } from '../util/users.js';
 import { ReadIncomingData } from '../util/request.js';
 import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process.js';
-import { AuthUsers, SaveAuthUsers, FindAuthUser, GetServer, SendLogMsg } from './state.js';
+import { AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 
@@ -17,14 +17,29 @@ const SendPM = async (recipient_id: string, content: string) => {
     Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
 };
 
-const UpdateUserState = async (id: string, xgmid: number) => {
-    const
-        member = GetServer(config.server)?.members.get(id),
-        ban = await Actions.Ban.Get(config.server, id).
-            then(() => true).
-            catch((e) => ((e.code == 404) || Logger.Error(e), false));
+const FilterRejection = (e: { code: number; }) => {
+    if(e.code != 404) throw e;
+    return undefined;
+};
 
-    SyncUser(id, xgmid, ban, member).catch(Logger.Error);
+const GetMember = (id: string) =>
+    Actions.Member.Get(config.server, id).
+        catch(FilterRejection);
+
+const GetBan = (id: string) =>
+    Actions.Ban.Get(config.server, id).
+        catch(FilterRejection);
+
+const UpdateUserState = async (id: string, xgmid?: number) => {
+    try {
+        const member = await GetMember(id);
+        await (xgmid ?
+            SyncUser(id, xgmid, Boolean(!member && await GetBan(id)), member) :
+            ClearUser(member)
+        );
+    } catch(e) {
+        Logger.Error(e);
+    }
 };
 
 const VerifyUser = async (code: string, xgmid: number) => {
@@ -69,8 +84,7 @@ const VerifyUser = async (code: string, xgmid: number) => {
         if(prev) {
             Logger.Log(`Verify: remove ${user.id}`);
             AuthUsers.delete(prev);
-            const member = GetServer(config.server)?.members.get(prev);
-            member && ClearUser(member);
+            UpdateUserState(prev);
         }
 
         Logger.Log(`Verify: ${user.id} -> ${xgmid}`);
@@ -129,9 +143,7 @@ const webApiFuncs: {
 
         AuthUsers.delete(id);
         SaveAuthUsers();
-
-        const member = GetServer(config.server)?.members.get(id);
-        member && ClearUser(member);
+        UpdateUserState(id);
 
         const
             data = await ReadIncomingData(request),
