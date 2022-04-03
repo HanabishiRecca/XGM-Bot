@@ -1,14 +1,31 @@
 import { readFileSync } from 'fs';
 
-export type Config = {
-    server: string;
-    roles: string[];
-    marks: MarkChannels;
+type Configs = {
+
+    bot: {
+        server: string;
+        roles: string[];
+    };
+
+    commands: {
+        embed_message_color: number;
+        embed_error_color: number;
+    };
+
+    marks: Record<string, Record<string, Record<string, string>>>;
+
+    news: {
+        back_messages_limit: number;
+        embed_color: number;
+    };
+
+    users: {
+        roles: string[];
+    };
+
 };
 
-type MarkChannels = Record<string, MarkMessages>;
-type MarkMessages = Record<string, MarkReactions>;
-type MarkReactions = Record<string, string>;
+const readOptions = { encoding: 'utf8' } as const;
 
-export const config = JSON.parse(readFileSync(`${process.cwd()}/config.json`, { encoding: 'utf8' })) as Config;
-export default config;
+export const LoadConfig = <T extends keyof Configs>(name: T) =>
+    JSON.parse(readFileSync(`${process.cwd()}/config/${name}.json`, readOptions)) as Configs[T];

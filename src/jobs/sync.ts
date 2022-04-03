@@ -14,11 +14,13 @@ const {
 } = process.env;
 
 import Storage from '../util/storage.js';
-import config from '../util/config.js';
+import { LoadConfig } from '../util/config.js';
 import { SyncUser, ClearUser } from '../util/users.js';
 import { Authorization, Actions, Types } from 'discord-slim';
 
 const MEMBERS_REQUEST_LIMIT = 1000;
+
+const config = LoadConfig('bot');
 
 Actions.setDefaultRequestOptions({
     authorization: new Authorization(TOKEN),
@@ -60,16 +62,16 @@ const SyncUsers = async (users: Map<string, number>, members: Map<string, Types.
             user = bans.get(id);
 
         if(member)
-            await SyncUser(member, xgmid, Boolean(user));
+            await SyncUser(config.server, member, xgmid, Boolean(user));
         else if(user)
-            await SyncUser({ user }, xgmid, true);
+            await SyncUser(config.server, { user }, xgmid, true);
     }
 };
 
 const CheckRevoked = async (users: Map<string, number>, members: Map<string, Types.Member>) => {
     for(const member of members.values())
         if(!users.has(member.user!.id))
-            await ClearUser(member);
+            await ClearUser(config.server, member);
 };
 
 (async () => {

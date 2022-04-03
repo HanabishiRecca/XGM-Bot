@@ -1,10 +1,12 @@
 import Logger from '../util/log.js';
+import { LoadConfig } from '../util/config.js';
 import Storage from '../util/storage.js';
 import { STORAGE, TOKEN, WH_LOG_ID, WH_LOG_TOKEN } from './process.js';
 import { Authorization, Actions } from 'discord-slim';
 
-const dbPath = `${STORAGE}/users.db`;
+export const config = LoadConfig('bot');
 
+const dbPath = `${STORAGE}/users.db`;
 export const AuthUsers = Storage.Load<string, number>(dbPath);
 
 export const SaveAuthUsers = () =>

@@ -15,17 +15,17 @@ const {
     TOKEN = Shutdown('Bot token required.'),
 } = process.env;
 
+import { LoadConfig } from '../util/config.js';
 import Storage from '../util/storage.js';
 import { HttpsGet } from '../util/request.js';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions, Types } from 'discord-slim';
 
 const
+    config = LoadConfig('news'),
     DB_PATH = `${STORAGE}/app.db`,
     FEED_URL = 'https://xgm.guru/rss',
-    PARAM_NAME = 'lastNewsTime',
-    BACK_MESSAGES_LIMIT = 10,
-    NEWS_COLOR = 16764928;
+    PARAM_NAME = 'lastNewsTime';
 
 Actions.setDefaultRequestOptions({
     authorization: new Authorization(TOKEN),
@@ -88,7 +88,7 @@ const GenEmbed = ({ item, date }: ItemInfo) => ({
         text: item.author,
     },
     timestamp: date.toISOString(),
-    color: NEWS_COLOR,
+    color: config.embed_color,
     image: {
         url: item.enclosure?.url,
     },
@@ -119,7 +119,7 @@ const PostMessage = async (info: ItemInfo) => {
 const PostNews = async (infos: ItemInfo[]) => {
     const
         webhook = await Actions.Webhook.GetWithToken(WH_NEWS_ID, WH_NEWS_TOKEN),
-        messages = await Actions.Channel.GetMessages(webhook.channel_id, { limit: BACK_MESSAGES_LIMIT });
+        messages = await Actions.Channel.GetMessages(webhook.channel_id, { limit: config.back_messages_limit });
 
     const FindExisting = (link: string) => {
         if(!link) return;

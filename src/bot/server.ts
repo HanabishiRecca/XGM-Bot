@@ -1,9 +1,8 @@
 import Logger from '../util/log.js';
-import config from '../util/config.js';
 import { SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users.js';
 import { ReadIncomingData } from '../util/request.js';
 import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process.js';
-import { AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
+import { config, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 
@@ -41,8 +40,8 @@ const UpdateUserState = async (id: string, xgmid?: number) => {
         }
 
         await (xgmid ?
-            SyncUser(member, xgmid, banned) :
-            ClearUser(member)
+            SyncUser(config.server, member, xgmid, banned) :
+            ClearUser(config.server, member)
         );
     } catch(e) {
         Logger.Error(e);

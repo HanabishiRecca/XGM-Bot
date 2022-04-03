@@ -1,14 +1,14 @@
 import Logger from '../util/log.js';
-import config from '../util/config.js';
+import { LoadConfig } from '../util/config.js';
 import { RequestXgmUser, GenXgmUserLink, GetUserCreationDate } from '../util/users.js';
-import { AuthUsers } from './state.js';
+import { config as botConfig, AuthUsers } from './state.js';
 import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
 const
-    EMBED_MESSAGE_COLOR = 16764928,
-    EMBED_ERROR_COLOR = 16716876,
     OPTION_USER = 'user',
     OPTION_PUBLIC = 'public';
+
+const config = LoadConfig('commands');
 
 let knownCommands: Set<string> | undefined;
 
@@ -18,7 +18,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     if(!user) {
         embeds.push({
             description: 'Указан несуществующий пользователь.',
-            color: EMBED_ERROR_COLOR,
+            color: config.embed_error_color,
         });
         return embeds;
     }
@@ -26,7 +26,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     embeds.push({
         title: `${user.username}\`#${user.discriminator}\``,
         thumbnail: { url: Tools.Resource.UserAvatar(user) },
-        color: EMBED_MESSAGE_COLOR,
+        color: config.embed_message_color,
         fields: [
             {
                 name: 'Дата создания',
@@ -39,7 +39,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     if(!xgmid) {
         embeds.push({
             description: 'Нет привязки к XGM.',
-            color: EMBED_ERROR_COLOR,
+            color: config.embed_error_color,
         });
         return embeds;
     }
@@ -48,7 +48,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     if(!xgmres) {
         embeds.push({
             description: 'Ошибка запроса к XGM.',
-            color: EMBED_ERROR_COLOR,
+            color: config.embed_error_color,
         });
         return embeds;
     }
@@ -57,7 +57,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     if(!info) {
         embeds.push({
             description: 'Привязан к несуществующему пользователю XGM.',
-            color: EMBED_ERROR_COLOR,
+            color: config.embed_error_color,
         });
         return embeds;
     }
@@ -80,7 +80,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
                 value: String(info.user.level_xp),
             },
         ],
-        color: EMBED_MESSAGE_COLOR,
+        color: config.embed_message_color,
     });
 
     return embeds;
@@ -122,7 +122,7 @@ export const RegisterCommands = async (id: string) => {
     if(knownCommands) return;
     knownCommands = new Set();
 
-    const commands = await Actions.Application.BulkOverwriteGuildCommands(id, config.server, [
+    const commands = await Actions.Application.BulkOverwriteGuildCommands(id, botConfig.server, [
         {
             name: 'who',
             description: 'Показать информацию о пользователе.',

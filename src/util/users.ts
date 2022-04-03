@@ -1,7 +1,9 @@
 import Logger from './log.js';
-import config from './config.js';
+import { LoadConfig } from './config.js';
 import { HttpsGet } from './request.js';
 import { Actions, Types } from 'discord-slim';
+
+const config = LoadConfig('users');
 
 export const
     GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}`,
@@ -12,21 +14,21 @@ export type MemberPart = Pick<Types.Member, 'user'> & Partial<Pick<Types.Member,
 const IsInProject = (status?: string | null) =>
     Boolean(status) && ((status == 'active') || (status == 'moderator') || (status == 'leader'));
 
-const SetRole = async ({ user: { id }, roles }: MemberPart, role: string, enable: boolean) => {
+const SetRole = async (server: string, { user: { id }, roles }: MemberPart, role: string, enable: boolean) => {
     if(!roles) return;
     roles.includes(role) ?
-        enable || await Actions.Member.RemoveRole(config.server, id, role) :
-        enable && await Actions.Member.AddRole(config.server, id, role);
+        enable || await Actions.Member.RemoveRole(server, id, role) :
+        enable && await Actions.Member.AddRole(server, id, role);
 };
 
-const SetRoles = async (member: MemberPart, flags?: boolean[]) => {
+const SetRoles = async (server: string, member: MemberPart, flags?: boolean[]) => {
     let index = 0;
     for(const role of config.roles)
-        await SetRole(member, role, flags?.[index++] ?? false);
+        await SetRole(server, member, role, flags?.[index++] ?? false);
 };
 
-const SetNick = (id: string, nick: string | null) =>
-    Actions.Member.Modify(config.server, id, { nick }).
+const SetNick = (server: string, id: string, nick: string | null) =>
+    Actions.Member.Modify(server, id, { nick }).
         catch(() => Logger.Warn(`Can't change a nickname for ${id}.`));
 
 type XgmUser = {
@@ -83,7 +85,7 @@ export const RequestXgmUser = async (xgmid: number) => {
     return JSON.parse(String(data)) as XgmUser;
 };
 
-const DoSync = async (member: MemberPart, xgmid: number, banned: boolean) => {
+const DoSync = async (server: string, member: MemberPart, xgmid: number, banned: boolean) => {
     const {
         info: {
             user: {
@@ -102,17 +104,17 @@ const DoSync = async (member: MemberPart, xgmid: number, banned: boolean) => {
     const { user: { id, username }, roles, nick } = member;
 
     if(staff_status == 'suspended') {
-        banned || await Actions.Ban.Add(config.server, id);
+        banned || await Actions.Ban.Add(server, id);
         return;
     }
 
     if(banned) {
-        await Actions.Ban.Remove(config.server, id);
+        await Actions.Ban.Remove(server, id);
         return;
     }
 
     if(!roles) return;
-    await SetRoles(member, [
+    await SetRoles(server, member, [
         staff_status == 'readonly',
         true,
         IsInProject(staff_status),
@@ -120,19 +122,19 @@ const DoSync = async (member: MemberPart, xgmid: number, banned: boolean) => {
         seeTwilight,
     ]);
 
-    if((nick == xgmname) && (username == xgmname)) return;
-    await SetNick(id, xgmname);
+    if((nick ?? username) == xgmname) return;
+    await SetNick(server, id, xgmname);
 };
 
 const syncLock = new Set<string>();
 
-export const SyncUser = async (member: MemberPart, xgmid: number, banned: boolean) => {
+export const SyncUser = async (server: string, member: MemberPart, xgmid: number, banned: boolean) => {
     const { user: { id } } = member;
     if(syncLock.has(id)) return;
     syncLock.add(id);
 
     try {
-        await DoSync(member, xgmid, banned);
+        await DoSync(server, member, xgmid, banned);
     } catch(e) {
         throw e;
     } finally {
@@ -140,7 +142,7 @@ export const SyncUser = async (member: MemberPart, xgmid: number, banned: boolea
     }
 };
 
-export const ClearUser = async (member: MemberPart) => {
+export const ClearUser = async (server: string, member: MemberPart) => {
     const { user: { id }, roles } = member;
     if(!roles) return;
 
@@ -148,8 +150,8 @@ export const ClearUser = async (member: MemberPart) => {
     syncLock.add(id);
 
     try {
-        await SetRoles(member);
-        member.nick && await SetNick(id, null);
+        await SetRoles(server, member);
+        member.nick && await SetNick(server, id, null);
     } catch(e) {
         throw e;
     } finally {

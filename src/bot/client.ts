@@ -1,8 +1,7 @@
 import Logger from '../util/log.js';
-import config from '../util/config.js';
 import { SyncUser, ClearUser, MemberPart } from '../util/users.js';
 import { Shutdown } from './process.js';
-import { AuthUsers, SendLogMsg, authorization } from './state.js';
+import { config, AuthUsers, SendLogMsg, authorization } from './state.js';
 import { SetMarks, ReactionProc } from './marks.js';
 import { RegisterCommands, HandleInteraction } from './commands.js';
 import { Client, ClientEvents, Events, Helpers, Tools } from 'discord-slim';
@@ -21,8 +20,8 @@ const CheckUser = (member: MemberPart, banned: boolean) => {
     if(member.user.bot) return;
     const xgmid = AuthUsers.get(member.user.id);
     (xgmid ?
-        SyncUser(member, xgmid, banned) :
-        ClearUser(member)
+        SyncUser(config.server, member, xgmid, banned) :
+        ClearUser(config.server, member)
     ).catch(Logger.Error);
 };
 
