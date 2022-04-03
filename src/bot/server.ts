@@ -4,7 +4,7 @@ import { SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users.j
 import { ReadIncomingData } from '../util/request.js';
 import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process.js';
 import { AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state.js';
-import { Authorization, Actions, Helpers, Tools, Types } from 'discord-slim';
+import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 
 const

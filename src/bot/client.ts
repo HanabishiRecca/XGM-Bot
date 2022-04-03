@@ -5,7 +5,7 @@ import { Shutdown } from './process.js';
 import { AuthUsers, SendLogMsg, authorization } from './state.js';
 import { SetMarks, ReactionProc } from './marks.js';
 import { RegisterCommands, HandleInteraction } from './commands.js';
-import { Client, ClientEvents, Events, Helpers, Tools, Types } from 'discord-slim';
+import { Client, ClientEvents, Events, Helpers, Tools } from 'discord-slim';
 
 const client = new Client();
 
