@@ -15,6 +15,8 @@ client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
+const IsServer = (id?: string) => id == config.server;
+
 const CheckUser = (user: Types.User, banned: boolean, member?: Pick<Types.Member, 'roles' | 'nick'>) => {
     if(!user) return;
     const { id, bot } = user;
@@ -42,54 +44,44 @@ client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
     const { guild_id, user } = member;
-    if(guild_id != config.server) return;
+    if(!IsServer(guild_id)) return;
     SendLogMsg(`<:zplus:544205514943365123> ${Tools.Mention.User(user)} присоединился к серверу.`);
     CheckUser(user, false, member);
 });
 
 client.events.on(Events.GUILD_MEMBER_UPDATE, (member) => {
     const { guild_id, user } = member;
-    if(guild_id != config.server) return;
+    if(!IsServer(guild_id)) return;
     CheckUser(user, false, member);
 });
 
-client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user }) => {
-    if(guild_id != config.server) return;
-    SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mention.User(user)} покинул сервер.`);
-});
+client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user }) =>
+    IsServer(guild_id) &&
+    SendLogMsg(`<:zminus:544205486073839616> ${Tools.Mention.User(user)} покинул сервер.`));
 
-client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) => {
-    const { member, guild_id } = reaction;
-    if(!member || (guild_id != config.server)) return;
-    ReactionProc(reaction, true);
-    CheckUser(member.user, false, member);
-});
+client.events.on(Events.MESSAGE_REACTION_ADD, (reaction) =>
+    IsServer(reaction.guild_id) &&
+    ReactionProc(reaction, true));
 
-client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) => {
-    if(reaction.guild_id != config.server) return;
-    ReactionProc(reaction, false);
-});
+client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) =>
+    IsServer(reaction.guild_id) &&
+    ReactionProc(reaction, false));
 
-client.events.on(Events.GUILD_CREATE, ({ id, emojis }) => {
-    if(id != config.server) return;
-    SetMarks(emojis);
-});
-
-client.events.on(Events.MESSAGE_CREATE, ({ author, member }) => {
-    if(author.bot) return;
-    CheckUser(author, false, member);
-});
+client.events.on(Events.GUILD_CREATE, ({ id, emojis }) =>
+    IsServer(id) &&
+    SetMarks(emojis));
 
 client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user }) =>
-    (guild_id == config.server) && CheckUser(user, true));
+    IsServer(guild_id) &&
+    CheckUser(user, true));
 
 client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user }) =>
-    (guild_id == config.server) && CheckUser(user, false));
+    IsServer(guild_id) &&
+    CheckUser(user, false));
 
 client.Connect(authorization, Helpers.Intents.SYSTEM
     | Helpers.Intents.GUILDS
     | Helpers.Intents.GUILD_MEMBERS
     | Helpers.Intents.GUILD_BANS
-    | Helpers.Intents.GUILD_MESSAGES
     | Helpers.Intents.GUILD_MESSAGE_REACTIONS
 );
