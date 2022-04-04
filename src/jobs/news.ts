@@ -16,16 +16,16 @@ const {
 } = process.env;
 
 import { LoadConfig } from '../util/config.js';
-import Storage from '../util/storage.js';
 import { HttpsGet } from '../util/request.js';
+import { readFileSync, writeFileSync, renameSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions, Types } from 'discord-slim';
 
 const
     config = LoadConfig('news'),
-    DB_PATH = `${STORAGE}/app.db`,
+    DB_PATH = `${STORAGE}/news_timestamp`,
     FEED_URL = 'https://xgm.guru/rss',
-    PARAM_NAME = 'lastNewsTime';
+    fileOptions = { encoding: 'utf8' } as const;
 
 Actions.setDefaultRequestOptions({
     authorization: new Authorization(TOKEN),
@@ -162,16 +162,28 @@ const CheckNews = async (checkTime?: number) => {
     );
 };
 
+const ReadTimestamp = () => {
+    try {
+        return Number(readFileSync(DB_PATH, fileOptions));
+    } catch(e: any) {
+        if(e?.code != 'ENOENT') throw e;
+    }
+};
+
+const WriteTimestamp = (timestamp: number) => {
+    const np = `${DB_PATH}.new`;
+    writeFileSync(np, String(timestamp), fileOptions);
+    renameSync(np, DB_PATH);
+};
+
 const StartJob = async () => {
     Logger.Log('Loading data...');
-    const app = Storage.Load<string, number>(DB_PATH);
 
-    const result = await CheckNews(app.get(PARAM_NAME));
+    const result = await CheckNews(ReadTimestamp());
     if(!result) return;
 
     Logger.Log('Saving data...');
-    app.set(PARAM_NAME, result);
-    Storage.Save(app, DB_PATH);
+    WriteTimestamp(result);
 };
 
 (async () => {
