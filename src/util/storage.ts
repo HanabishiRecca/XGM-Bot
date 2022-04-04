@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { randomUUID } from 'crypto';
 
 const
     { O_WRONLY, O_CREAT, O_EXCL, O_RDONLY } = fs.constants,
@@ -28,16 +27,28 @@ class DynamicBuffer {
     get length() { return this._length; }
 }
 
+const TryOpenRead = (path: string) => {
+    try {
+        return fs.openSync(path, O_RDONLY);
+    } catch(e: any) {
+        if(e?.code != 'ENOENT') throw e;
+    }
+};
+
 export const Load = <K, V>(path: string) => {
     const
         map = new Map<K, V>(),
-        file = fs.openSync(path, O_RDONLY),
+        file = TryOpenRead(path);
+
+    if(!file) return map;
+
+    const
         buffer = Buffer.allocUnsafe(RD_BUFFER_SIZE),
         gen = new DynamicBuffer();
 
     const add = () => {
         if(gen.length < 1) return;
-        const [k, v] = JSON.parse(`[${gen.toString()}]`) as [K, V];
+        const [k, v] = JSON.parse(`[${gen}]`) as [K, V];
         map.set(k, v);
         gen.reset();
     };
@@ -56,7 +67,7 @@ export const Load = <K, V>(path: string) => {
 
 export const Save = <K, V>(map: Map<K, V>, path: string) => {
     const
-        tmp = `${path}.${randomUUID()}`,
+        tmp = `${path}.${Date.now()}`,
         file = fs.openSync(tmp, WR_FLAGS);
 
     for(const entry of map) {
