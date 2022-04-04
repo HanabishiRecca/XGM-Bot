@@ -85,23 +85,17 @@ export const RequestXgmUser = async (xgmid: number) => {
     return JSON.parse(String(data)) as XgmUser;
 };
 
-const DoSync = async (server: string, member: MemberPart, xgmid: number, banned: boolean) => {
-    const {
-        info: {
-            user: {
-                username: xgmname,
-                seeTwilight,
-            },
-        },
-        state: {
-            access: {
-                staff_status,
-            },
-            projects,
-        },
-    } = await RequestXgmUser(xgmid);
+const DoSync = async ({ info, state }: XgmUser, server: string, member: MemberPart, banned: boolean) => {
+    if(!(info && state)) {
+        Logger.Warn('User not exists!');
+        await DoClean(server, member);
+        return;
+    }
 
-    const { user: { id, username }, roles, nick } = member;
+    const
+        { user: { username: xgmname, seeTwilight } } = info,
+        { access: { staff_status }, projects, } = state,
+        { user: { id, username }, roles, nick } = member;
 
     if(staff_status == 'suspended') {
         banned || await Actions.Ban.Add(server, id);
@@ -128,13 +122,15 @@ const DoSync = async (server: string, member: MemberPart, xgmid: number, banned:
 
 const syncLock = new Set<string>();
 
-export const SyncUser = async (server: string, member: MemberPart, xgmid: number, banned: boolean) => {
-    const { user: { id } } = member;
+export const SyncUser = async (server: string, member: MemberPart, xgmid: number, banned: boolean, prefetched?: XgmUser) => {
+    const { user: { id, bot } } = member;
+    if(bot) return;
+
     if(syncLock.has(id)) return;
     syncLock.add(id);
 
     try {
-        await DoSync(server, member, xgmid, banned);
+        await DoSync(prefetched ?? await RequestXgmUser(xgmid), server, member, banned);
     } catch(e) {
         throw e;
     } finally {
@@ -142,16 +138,21 @@ export const SyncUser = async (server: string, member: MemberPart, xgmid: number
     }
 };
 
+const DoClean = async (server: string, member: MemberPart) => {
+    await SetRoles(server, member);
+    if(!member.nick) return;
+    await SetNick(server, member.user.id, null);
+};
+
 export const ClearUser = async (server: string, member: MemberPart) => {
-    const { user: { id }, roles } = member;
-    if(!roles) return;
+    const { user: { id, bot }, roles } = member;
+    if(bot || !roles) return;
 
     if(syncLock.has(id)) return;
     syncLock.add(id);
 
     try {
-        await SetRoles(server, member);
-        member.nick && await SetNick(server, id, null);
+        await DoClean(server, member);
     } catch(e) {
         throw e;
     } finally {

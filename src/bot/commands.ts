@@ -1,6 +1,6 @@
 import Logger from '../util/log.js';
 import { LoadConfig } from '../util/config.js';
-import { RequestXgmUser, GenXgmUserLink, GetUserCreationDate } from '../util/users.js';
+import { RequestXgmUser, SyncUser, ClearUser, GenXgmUserLink, GetUserCreationDate, MemberPart } from '../util/users.js';
 import { config as botConfig, AuthUsers } from './state.js';
 import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
@@ -12,16 +12,10 @@ const config = LoadConfig('commands');
 
 let knownCommands: Set<string> | undefined;
 
-const GenUserInfoEmbeds = async (user?: Types.User) => {
-    const embeds: Types.Embed[] = [];
-
-    if(!user) {
-        embeds.push({
-            description: 'Указан несуществующий пользователь.',
-            color: config.embed_error_color,
-        });
-        return embeds;
-    }
+const GenUserInfoEmbeds = async (member: MemberPart) => {
+    const
+        embeds: Types.Embed[] = [],
+        { user } = member;
 
     embeds.push({
         title: `${user.username}\`#${user.discriminator}\``,
@@ -37,6 +31,7 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
 
     const xgmid = AuthUsers.get(user.id);
     if(!xgmid) {
+        ClearUser(botConfig.server, member);
         embeds.push({
             description: 'Нет привязки к XGM.',
             color: config.embed_error_color,
@@ -44,8 +39,8 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
         return embeds;
     }
 
-    const xgmres = await RequestXgmUser(xgmid).catch(Logger.Error);
-    if(!xgmres) {
+    const xgmuser = await RequestXgmUser(xgmid).catch(Logger.Error);
+    if(!xgmuser) {
         embeds.push({
             description: 'Ошибка запроса к XGM.',
             color: config.embed_error_color,
@@ -53,14 +48,17 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
         return embeds;
     }
 
-    const { info } = xgmres;
+    const { info } = xgmuser;
     if(!info) {
+        ClearUser(botConfig.server, member);
         embeds.push({
             description: 'Привязан к несуществующему пользователю XGM.',
             color: config.embed_error_color,
         });
         return embeds;
     }
+
+    SyncUser(botConfig.server, member, xgmid, false, xgmuser);
 
     embeds.push({
         title: info.user.username,
@@ -86,35 +84,34 @@ const GenUserInfoEmbeds = async (user?: Types.User) => {
     return embeds;
 };
 
-const ExtractOption = ({ options }: Types.InteractionData, name: string) =>
+const ExtractOption = (options: Types.InteractionData['options'], name: string) =>
     options?.find((option) => option.name == name)?.value;
 
-const ExtractInteractionData = async (data?: Types.InteractionData, user?: Types.User) => {
-    if(!(data && user)) return;
-
-    Logger.Log(`COMMAND: ${data.name} USER: ${user.username}#${user.discriminator}`);
-
-    if(!knownCommands?.has(data.id)) return;
-
+const ExtractInteractionData = async ({ options, target_id, resolved }: Types.InteractionData, sender: Types.Member) => {
     const
-        target = String(ExtractOption(data, OPTION_USER) ?? data.target_id ?? ''),
-        show = Boolean(ExtractOption(data, OPTION_PUBLIC));
+        target = String(ExtractOption(options, OPTION_USER) ?? target_id ?? ''),
+        show = Boolean(ExtractOption(options, OPTION_PUBLIC)),
+        user = resolved?.users?.[target],
+        member = user ? { ...resolved?.members?.[target], user } : sender;
 
     return {
-        embeds: await GenUserInfoEmbeds(data.resolved?.users?.[target] ?? user),
+        embeds: await GenUserInfoEmbeds(member),
         flags: show ? Helpers.MessageFlags.NO_FLAGS : Helpers.MessageFlags.EPHEMERAL,
     };
 };
 
-export const HandleInteraction = async (interaction: Types.Interaction) => {
-    if(interaction.type != Helpers.InteractionTypes.APPLICATION_COMMAND) return;
+export const HandleInteraction = async ({ data, member, type, id, token }: Types.Interaction) => {
+    if(!(data && member &&
+        (type == Helpers.InteractionTypes.APPLICATION_COMMAND)
+    )) return;
 
-    const data = await ExtractInteractionData(interaction.data, interaction.member?.user ?? interaction.user);
-    if(!data) return;
+    const { user: { username, discriminator } } = member;
+    Logger.Log(`COMMAND: ${data.name} USER: ${username}#${discriminator}`);
+    if(!knownCommands?.has(data.id)) return;
 
-    Actions.Application.CreateInteractionResponse(interaction.id, interaction.token, {
+    Actions.Application.CreateInteractionResponse(id, token, {
         type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,
-        data,
+        data: await ExtractInteractionData(data, member),
     }).catch(Logger.Error);
 };
 
