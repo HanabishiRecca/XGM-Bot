@@ -5,9 +5,7 @@ import { Actions, Types } from 'discord-slim';
 
 const config = LoadConfig('users');
 
-export const
-    GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}`,
-    GetUserCreationDate = (user_id: string) => Number(BigInt(user_id) >> 22n) + 1420070400000;
+export const GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}`;
 
 export type MemberPart = Pick<Types.Member, 'user'> & Partial<Pick<Types.Member, 'roles' | 'nick'>>;
 

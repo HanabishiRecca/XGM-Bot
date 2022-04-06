@@ -1,16 +1,13 @@
 import Logger from '../util/log.js';
 import { LoadConfig } from '../util/config.js';
-import { RequestXgmUser, SyncUser, ClearUser, GenXgmUserLink, GetUserCreationDate, MemberPart } from '../util/users.js';
+import { RequestXgmUser, SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users.js';
 import { config as botConfig, AuthUsers } from './state.js';
 import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
 const
     OPTION_USER = 'user',
-    OPTION_PUBLIC = 'public';
-
-const config = LoadConfig('commands');
-
-let knownCommands: Set<string> | undefined;
+    OPTION_PUBLIC = 'public',
+    config = LoadConfig('commands');
 
 const GenUserInfoEmbeds = async (member: MemberPart) => {
     const
@@ -19,12 +16,17 @@ const GenUserInfoEmbeds = async (member: MemberPart) => {
 
     embeds.push({
         title: `${user.username}\`#${user.discriminator}\``,
-        thumbnail: { url: Tools.Resource.UserAvatar(user) },
+        thumbnail: {
+            url: Tools.Resource.UserAvatar(user),
+        },
         color: config.embed_message_color,
         fields: [
             {
                 name: 'Дата создания',
-                value: Tools.Format.Timestamp(Math.trunc(GetUserCreationDate(user.id) / 1000), Helpers.TimestampStyles.SHORT_DATE_TIME),
+                value: Tools.Format.Timestamp(
+                    Tools.Utils.GetUserCreationDate(user),
+                    Helpers.TimestampStyles.SHORT_DATE_TIME,
+                ),
             },
         ],
     });
@@ -84,15 +86,31 @@ const GenUserInfoEmbeds = async (member: MemberPart) => {
     return embeds;
 };
 
-const ExtractOption = (options: Types.InteractionData['options'], name: string) =>
-    options?.find((option) => option.name == name)?.value;
+const FindOption = (options: Types.InteractionDataOption[], name: string) =>
+    options.find((option) => option.name == name);
 
 const ExtractInteractionData = async ({ options, target_id, resolved }: Types.InteractionData, sender: Types.Member) => {
-    const
-        target = String(ExtractOption(options, OPTION_USER) ?? target_id ?? ''),
-        show = Boolean(ExtractOption(options, OPTION_PUBLIC)),
-        user = resolved?.users?.[target],
-        member = user ? { ...resolved?.members?.[target], user } : sender;
+    let member = sender as MemberPart,
+        target = '',
+        show = false;
+
+    if(target_id) {
+        target = target_id;
+    } else if(options) {
+        const userOption = FindOption(options, OPTION_USER);
+        if(userOption?.type == Helpers.ApplicationCommandOptionTypes.USER)
+            target = userOption.value;
+
+        const publicOption = FindOption(options, OPTION_PUBLIC);
+        if(publicOption?.type == Helpers.ApplicationCommandOptionTypes.BOOLEAN)
+            show = publicOption.value;
+    }
+
+    if(target && resolved) {
+        const user = resolved.users?.[target];
+        if(user)
+            member = { ...resolved.members?.[target], user };
+    }
 
     return {
         embeds: await GenUserInfoEmbeds(member),
@@ -107,7 +125,6 @@ export const HandleInteraction = async ({ data, member, type, id, token }: Types
 
     const { user: { username, discriminator } } = member;
     Logger.Log(`COMMAND: ${data.name} USER: ${username}#${discriminator}`);
-    if(!knownCommands?.has(data.id)) return;
 
     Actions.Application.CreateInteractionResponse(id, token, {
         type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -115,11 +132,13 @@ export const HandleInteraction = async ({ data, member, type, id, token }: Types
     }).catch(Logger.Error);
 };
 
-export const RegisterCommands = async (id: string) => {
-    if(knownCommands) return;
-    knownCommands = new Set();
+let done = false;
 
-    const commands = await Actions.Application.BulkOverwriteGuildCommands(id, botConfig.server, [
+export const RegisterCommands = (id: string) => {
+    if(done) return;
+    done = true;
+
+    Actions.Application.BulkOverwriteGuildCommands(id, botConfig.server, [
         {
             name: 'who',
             description: 'Показать информацию о пользователе.',
@@ -141,10 +160,6 @@ export const RegisterCommands = async (id: string) => {
         {
             name: 'Идентификация',
             type: Helpers.ApplicationCommandTypes.USER,
-            description: '',
         },
     ]);
-
-    for(const { id } of commands)
-        knownCommands.add(id);
 };
