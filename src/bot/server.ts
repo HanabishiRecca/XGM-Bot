@@ -236,7 +236,7 @@ const HandleRequest = async (request: IncomingMessage, response: ServerResponse)
     if(Number(headers['content-length']) > MAX_PAYLOAD)
         return response.statusCode = 413;
 
-    await webApiFuncs[url](request, response);
+    await webApiFuncs[url]?.(request, response);
 };
 
 createServer(async (request, response) => {

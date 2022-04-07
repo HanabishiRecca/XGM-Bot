@@ -1,4 +1,4 @@
-import fs from 'fs';
+import * as fs from 'fs';
 
 const
     { O_WRONLY, O_CREAT, O_EXCL, O_RDONLY } = fs.constants,

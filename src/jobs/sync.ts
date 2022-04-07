@@ -38,14 +38,17 @@ const FetchMembers = async () => {
 
     while(true) {
         const members = await Actions.Guild.ListMembers(config.server, query);
+        let last: string | undefined;
 
-        for(const member of members)
-            result.set(member.user!.id, member);
+        for(const member of members) {
+            last = member.user.id;
+            result.set(last, member);
+        }
 
-        if(members.length < MEMBERS_REQUEST_LIMIT)
+        if(!last || (members.length < MEMBERS_REQUEST_LIMIT))
             break;
 
-        query.after = members[members.length - 1].user!.id;
+        query.after = last;
     }
 
     return result;

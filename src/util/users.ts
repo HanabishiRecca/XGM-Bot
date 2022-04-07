@@ -71,7 +71,7 @@ type XgmUser = {
                 title: string | null;
                 level: string | null;
                 active: string | null;
-            } | undefined;
+            };
         };
     };
     timeElapsedSec: number;
