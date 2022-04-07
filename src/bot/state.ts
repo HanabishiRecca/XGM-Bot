@@ -1,7 +1,7 @@
-import Logger from '../util/log.js';
-import { LoadConfig } from '../util/config.js';
-import Storage from '../util/storage.js';
-import { STORAGE, TOKEN, WH_LOG_ID, WH_LOG_TOKEN } from './process.js';
+import Logger from '../util/log';
+import { LoadConfig } from '../util/config';
+import Storage from '../util/storage';
+import { STORAGE, TOKEN, WH_LOG_ID, WH_LOG_TOKEN } from './process';
 import { Authorization, Actions } from 'discord-slim';
 
 export const config = LoadConfig('bot');

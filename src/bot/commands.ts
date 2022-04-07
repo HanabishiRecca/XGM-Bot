@@ -1,7 +1,7 @@
-import Logger from '../util/log.js';
-import { LoadConfig } from '../util/config.js';
-import { RequestXgmUser, SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users.js';
-import { config as botConfig, AuthUsers } from './state.js';
+import Logger from '../util/log';
+import { LoadConfig } from '../util/config';
+import { RequestXgmUser, SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users';
+import { config as botConfig, AuthUsers } from './state';
 import { Actions, Helpers, Tools, Types } from 'discord-slim';
 
 const

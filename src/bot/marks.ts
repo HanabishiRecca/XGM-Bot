@@ -1,7 +1,7 @@
-import Logger from '../util/log.js';
-import { LoadConfig } from '../util/config.js';
-import { config } from './state.js';
-import { CLIENT_ID } from './process.js';
+import Logger from '../util/log';
+import { LoadConfig } from '../util/config';
+import { config } from './state';
+import { CLIENT_ID } from './process';
 import { Actions, Tools, Types } from 'discord-slim';
 
 type Reaction = {

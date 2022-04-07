@@ -1,9 +1,9 @@
-import Logger from '../util/log.js';
-import { SyncUser, ClearUser, MemberPart } from '../util/users.js';
-import { Shutdown } from './process.js';
-import { config, AuthUsers, SendLogMsg, authorization } from './state.js';
-import { SetMarks, ReactionProc } from './marks.js';
-import { RegisterCommands, HandleInteraction } from './commands.js';
+import Logger from '../util/log';
+import { SyncUser, ClearUser, MemberPart } from '../util/users';
+import { Shutdown } from './process';
+import { config, AuthUsers, SendLogMsg, authorization } from './state';
+import { SetMarks, ReactionProc } from './marks';
+import { RegisterCommands, HandleInteraction } from './commands';
 import { Client, ClientEvents, Events, Helpers, Tools } from 'discord-slim';
 
 const client = new Client();

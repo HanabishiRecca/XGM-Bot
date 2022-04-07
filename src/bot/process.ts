@@ -1,4 +1,4 @@
-import Logger from '../util/log.js';
+import Logger from '../util/log';
 
 export const Shutdown = (e: any) => {
     Logger.Error(e);

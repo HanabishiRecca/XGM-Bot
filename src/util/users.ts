@@ -1,6 +1,6 @@
-import Logger from './log.js';
-import { LoadConfig } from './config.js';
-import { HttpsGet } from './request.js';
+import Logger from './log';
+import { LoadConfig } from './config';
+import { HttpsGet } from './request';
 import { Actions, Types } from 'discord-slim';
 
 const config = LoadConfig('users');
