@@ -9,7 +9,6 @@
     "type": "module",
     "scripts": {
         "build": "esbuild 'src/bot/index.ts' 'src/jobs/'*'.ts' --outdir='app' --bundle --platform=node --format=esm --analyze --external:'discord-slim' --external:'fast-xml-parser'",
-        "prebuild": "tsc",
         "start": "node --expose-gc ."
     },
     "dependencies": {
@@ -18,7 +17,6 @@
     },
     "devDependencies": {
         "@types/node": "*",
-        "esbuild": "0.14",
-        "typescript": "4.6"
+        "esbuild": "0.14"
     }
 }
