@@ -10,6 +10,7 @@ const client = new Client();
 
 client.on(ClientEvents.CONNECT, () => Logger.Log('Connection established.'));
 client.on(ClientEvents.DISCONNECT, (code) => Logger.Error(`Disconnect. (${code})`));
+client.on(ClientEvents.INFO, Logger.Log);
 client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
