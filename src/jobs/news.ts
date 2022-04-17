@@ -190,5 +190,4 @@ const StartJob = async () => {
     Logger.Log('News check job start.');
     await StartJob();
     Logger.Log('News check job finished.');
-    process.exit();
 })();

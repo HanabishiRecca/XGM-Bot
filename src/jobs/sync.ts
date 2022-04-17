@@ -95,5 +95,4 @@ const CheckRevoked = async (users: Map<string, number>, members: Map<string, Typ
     await CheckRevoked(users, members).catch(Logger.Error);
 
     Logger.Log('Users sync job finished.');
-    process.exit();
 })();
