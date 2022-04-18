@@ -1,4 +1,7 @@
-const DT = () => `[${new Date().toLocaleString('ru')}]`;
+const DT = () => {
+    const str = new Date().toISOString();
+    return `[${str.slice(0, 10)} ${str.slice(11, -1)}]`;
+};
 
 export const
     Log = (...params: any[]) => console.log('\x1b[0m', DT(), ...params),
