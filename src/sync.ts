@@ -1,4 +1,4 @@
-import Logger from '../util/log';
+import Logger from './util/log';
 
 const Shutdown = (e: any) => {
     Logger.Error(e);
@@ -13,9 +13,9 @@ const {
     TOKEN = Shutdown('Bot token required.'),
 } = process.env;
 
-import Storage from '../util/storage';
-import { LoadConfig } from '../util/config';
-import { SyncUser, ClearUser } from '../util/users';
+import Storage from './util/storage';
+import { LoadConfig } from './util/config';
+import { SyncUser, ClearUser } from './util/users';
 import { Authorization, Actions, Types } from 'discord-slim';
 
 const MEMBERS_REQUEST_LIMIT = 1000;

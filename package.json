@@ -1,14 +1,8 @@
 {
-    "description": "XGM Bot",
-    "author": "Hanabishi",
-    "homepage": "https://xgm.guru",
-    "discord": "https://discord.gg/vdS2kgr",
-    "repository": "https://github.com/HanabishiRecca/XGM-Bot",
-    "license": "MIT",
-    "main": "app/bot/index.js",
+    "main": "app/bot.js",
     "type": "module",
     "scripts": {
-        "build": "esbuild 'src/bot/index.ts' 'src/jobs/'*'.ts' --outdir='app' --bundle --platform=node --format=esm --analyze --external:'discord-slim' --external:'fast-xml-parser'",
+        "build": "esbuild 'src/'*'.ts' --outdir='app' --bundle --platform=node --format=esm --external:'./node_modules/*' --analyze",
         "start": "node --expose-gc ."
     },
     "dependencies": {

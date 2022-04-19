@@ -1,6 +1,6 @@
-import './process';
-import './client';
-import './server';
+import './bot/process';
+import './bot/client';
+import './bot/server';
 
 if(global.gc) {
     setInterval(global.gc, 3600000);

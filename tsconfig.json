@@ -12,7 +12,6 @@
         "lib": []
     },
     "include": [
-        "src/bot/index.ts",
-        "src/jobs/*.ts"
+        "src/*.ts"
     ]
 }

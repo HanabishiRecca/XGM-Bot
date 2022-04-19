@@ -1,4 +1,4 @@
-import Logger from '../util/log';
+import Logger from './util/log';
 
 const Shutdown = (e: any) => {
     Logger.Error(e);
@@ -15,8 +15,8 @@ const {
     TOKEN = Shutdown('Bot token required.'),
 } = process.env;
 
-import { LoadConfig } from '../util/config';
-import { HttpsGet } from '../util/request';
+import { LoadConfig } from './util/config';
+import { HttpsGet } from './util/request';
 import { readFileSync, writeFileSync, renameSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { Authorization, Actions, Types } from 'discord-slim';
