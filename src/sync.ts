@@ -73,7 +73,7 @@ const SyncUsers = async (users: Map<string, number>, members: Map<string, Types.
 
 const CheckRevoked = async (users: Map<string, number>, members: Map<string, Types.Member>) => {
     for(const member of members.values())
-        if(!users.has(member.user!.id))
+        if(!users.has(member.user.id))
             await ClearUser(config.server, member);
 };
 

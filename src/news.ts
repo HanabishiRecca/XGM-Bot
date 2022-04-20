@@ -23,9 +23,8 @@ import { Authorization, Actions, Types } from 'discord-slim';
 
 const
     config = LoadConfig('news'),
-    DB_PATH = `${STORAGE}/news_timestamp`,
-    FEED_URL = 'https://xgm.guru/rss',
-    fileOptions = { encoding: 'utf8' } as const;
+    TIMESTAMP_FILE = `${STORAGE}/news_timestamp`,
+    FEED_URL = 'https://xgm.guru/rss';
 
 Actions.setDefaultRequestOptions({
     authorization: new Authorization(TOKEN),
@@ -38,7 +37,7 @@ Actions.setDefaultRequestOptions({
 
 const DecodeHtmlEntity = (() => {
     const
-        htmlEntities: { [key: string]: string | undefined; } = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' },
+        htmlEntities: Record<string, string> = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' },
         decodeEntity = (_: string, dec: string) => htmlEntities[dec] ?? '',
         decodeSymbol = (_: string, dec: string) => String.fromCodePoint(Number(dec)),
         re = /&(nbsp|amp|quot|lt|gt);/g,
@@ -76,7 +75,6 @@ const FetchFeed = async () => {
     }).parse(data)?.rss?.channel?.item as FeedItem[] | undefined;
 
     if(!items) throw 'Incorrect feed data received.';
-
     return items;
 };
 
@@ -162,18 +160,20 @@ const CheckNews = async (checkTime?: number) => {
     );
 };
 
+const encoding = 'utf8';
+
 const ReadTimestamp = () => {
     try {
-        return Number(readFileSync(DB_PATH, fileOptions));
+        return Number(readFileSync(TIMESTAMP_FILE, { encoding }));
     } catch(e: any) {
         if(e?.code != 'ENOENT') throw e;
     }
 };
 
 const WriteTimestamp = (timestamp: number) => {
-    const np = `${DB_PATH}.new`;
-    writeFileSync(np, String(timestamp), fileOptions);
-    renameSync(np, DB_PATH);
+    const np = `${TIMESTAMP_FILE}.new`;
+    writeFileSync(np, String(timestamp), { encoding });
+    renameSync(np, TIMESTAMP_FILE);
 };
 
 const StartJob = async () => {
