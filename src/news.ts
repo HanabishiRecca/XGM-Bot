@@ -19,7 +19,7 @@ import { LoadConfig } from './util/config';
 import { HttpsGet } from './util/request';
 import { readFileSync, writeFileSync, renameSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
-import { Authorization, Actions, Types } from 'discord-slim';
+import { Authorization, Actions } from 'discord-slim';
 
 const
     config = LoadConfig('news'),
@@ -105,7 +105,7 @@ const PostMessage = async (info: ItemInfo) => {
         WH_NEWS_TOKEN,
         { embeds: [embed] },
         { wait: true },
-    ) as Types.Message;
+    );
 
     await Actions.Message.Crosspost(channel_id, id).catch(Logger.Error);
 
@@ -160,11 +160,9 @@ const CheckNews = async (checkTime?: number) => {
     );
 };
 
-const encoding = 'utf8';
-
 const ReadTimestamp = () => {
     try {
-        return Number(readFileSync(TIMESTAMP_FILE, { encoding }));
+        return Number(readFileSync(TIMESTAMP_FILE, { encoding: 'utf8' }));
     } catch(e: any) {
         if(e?.code != 'ENOENT') throw e;
     }
@@ -172,7 +170,7 @@ const ReadTimestamp = () => {
 
 const WriteTimestamp = (timestamp: number) => {
     const np = `${TIMESTAMP_FILE}.new`;
-    writeFileSync(np, String(timestamp), { encoding });
+    writeFileSync(np, String(timestamp), { encoding: 'utf8' });
     renameSync(np, TIMESTAMP_FILE);
 };
 
