@@ -1,10 +1,20 @@
 import Logger from '../util/log';
 import { SyncUser, ClearUser, MemberPart } from '../util/users';
-import { Shutdown } from './process';
+import { Shutdown, STORAGE, CLIENT_ID } from './process';
 import { config, AuthUsers, SendLogMsg, authorization } from './state';
 import { SetMarks, ReactionProc } from './marks';
 import { RegisterCommands, HandleInteraction } from './commands';
+import { readFileSync, writeFileSync, rmSync } from 'fs';
 import { Client, ClientEvents, Events, Helpers, Tools } from 'discord-slim';
+
+const INTENTS = (Helpers.Intents.SYSTEM
+    | Helpers.Intents.GUILDS
+    | Helpers.Intents.GUILD_MEMBERS
+    | Helpers.Intents.GUILD_BANS
+    | Helpers.Intents.GUILD_MESSAGE_REACTIONS
+);
+
+const SESSION_FILE = `${STORAGE}/session`;
 
 const client = new Client();
 
@@ -14,6 +24,38 @@ client.on(ClientEvents.INFO, Logger.Log);
 client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
+
+process.on('exit', () => {
+    const { session } = client;
+    if(!session) return;
+    writeFileSync(SESSION_FILE, `${session.id}\n${session.seq}`, { encoding: 'utf8' });
+});
+
+process.on('SIGTERM', Shutdown);
+process.on('SIGINT', Shutdown);
+process.on('SIGHUP', Shutdown);
+
+const LoadSession = () => {
+    let content: string;
+
+    try {
+        content = readFileSync(SESSION_FILE, { encoding: 'utf8' });
+    } catch {
+        Logger.Warn('Session file not found.');
+        return;
+    }
+
+    const [id, seqs] = content.split('\n');
+    if(!(id && seqs)) return;
+
+    const seq = Number(seqs);
+    if(!(seq > 0)) return;
+
+    Logger.Log('Session:', id);
+    Logger.Log('Sequence:', seq);
+
+    return { id, seq };
+};
 
 const IsServer = (id?: string) => id == config.server;
 
@@ -26,11 +68,8 @@ const CheckUser = (member: MemberPart, banned: boolean) => {
     ).catch(Logger.Error);
 };
 
-client.events.on(Events.READY, ({ user: { id } }) => {
-    Logger.Log('READY');
-    RegisterCommands(id);
-});
-
+client.events.on(Events.READY, () => Logger.Log('READY'));
+client.events.on(Events.RESUMED, () => Logger.Log('RESUMED'));
 client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
@@ -55,9 +94,11 @@ client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) =>
     IsServer(reaction.guild_id) &&
     ReactionProc(reaction, false));
 
-client.events.on(Events.GUILD_CREATE, ({ id, emojis }) =>
-    IsServer(id) &&
-    SetMarks(emojis));
+client.events.on(Events.GUILD_CREATE, ({ id, emojis }) => {
+    if(!IsServer(id)) return;
+    RegisterCommands(CLIENT_ID);
+    SetMarks(emojis);
+});
 
 client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user }) =>
     IsServer(guild_id) &&
@@ -67,9 +108,11 @@ client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user }) =>
     IsServer(guild_id) &&
     CheckUser({ user }, false));
 
-client.Connect(authorization, Helpers.Intents.SYSTEM
-    | Helpers.Intents.GUILDS
-    | Helpers.Intents.GUILD_MEMBERS
-    | Helpers.Intents.GUILD_BANS
-    | Helpers.Intents.GUILD_MESSAGE_REACTIONS
-);
+(() => {
+    const session = LoadSession();
+    rmSync(SESSION_FILE, { force: true });
+
+    session ?
+        client.Resume(authorization, session) :
+        client.Connect(authorization, INTENTS);
+})();
