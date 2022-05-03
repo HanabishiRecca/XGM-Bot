@@ -68,8 +68,6 @@ const CheckUser = (member: MemberPart, banned: boolean) => {
     ).catch(Logger.Error);
 };
 
-client.events.on(Events.READY, () => Logger.Log('READY'));
-client.events.on(Events.RESUMED, () => Logger.Log('RESUMED'));
 client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
 client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
