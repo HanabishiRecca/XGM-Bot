@@ -1,7 +1,6 @@
 import Logger from '../util/log';
 import { LoadConfig } from '../util/config';
 import { config } from './state';
-import { CLIENT_ID } from './process';
 import { Actions, Tools, Types } from 'discord-slim';
 
 type Reaction = {
@@ -14,7 +13,7 @@ type Reaction = {
 const marks = LoadConfig('marks');
 
 export const ReactionProc = ({ user_id, channel_id, message_id, emoji: { id } }: Reaction, add: boolean) => {
-    if(!id || (user_id == CLIENT_ID)) return;
+    if(!id || (user_id == config.id)) return;
 
     const role = marks[channel_id]?.[message_id]?.[id];
     if(!role) return;

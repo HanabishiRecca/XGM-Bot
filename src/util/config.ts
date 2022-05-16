@@ -3,8 +3,8 @@ import { readFileSync } from 'fs';
 type Configs = {
 
     bot: {
+        id: string;
         server: string;
-        roles: string[];
     };
 
     commands: {

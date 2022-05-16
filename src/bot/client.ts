@@ -1,6 +1,6 @@
 import Logger from '../util/log';
 import { SyncUser, ClearUser, MemberPart } from '../util/users';
-import { Shutdown, STORAGE, CLIENT_ID } from './process';
+import { Shutdown, STORAGE } from './process';
 import { config, AuthUsers, SendLogMsg, authorization } from './state';
 import { SetMarks, ReactionProc } from './marks';
 import { RegisterCommands, HandleInteraction } from './commands';
@@ -94,7 +94,7 @@ client.events.on(Events.MESSAGE_REACTION_REMOVE, (reaction) =>
 
 client.events.on(Events.GUILD_CREATE, ({ id, emojis }) => {
     if(!IsServer(id)) return;
-    RegisterCommands(CLIENT_ID);
+    RegisterCommands(config.id);
     SetMarks(emojis);
 });
 

@@ -14,7 +14,6 @@ export const {
     TOKEN = Shutdown('Bot token required.'),
     WH_LOG_ID = Shutdown('Log webhook id required.'),
     WH_LOG_TOKEN = Shutdown('Log webhook token required.'),
-    CLIENT_ID = Shutdown('Client id required.'),
     AUTH_SVC = Shutdown('Server auth required.'),
     CLIENT_SECRET = Shutdown('Client secret required.'),
     REDIRECT_URL = Shutdown('Redirect URL required.'),

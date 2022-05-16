@@ -1,7 +1,7 @@
 import Logger from '../util/log';
 import { SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users';
 import { ReadIncomingData } from '../util/request';
-import { AUTH_SVC, CLIENT_ID, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process';
+import { AUTH_SVC, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process';
 import { config, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
@@ -50,7 +50,7 @@ const UpdateUserState = async (id: string, xgmid?: number) => {
 
 const VerifyUser = async (code: string, xgmid: number) => {
     const res = await Actions.OAuth2.TokenExchange({
-        client_id: CLIENT_ID,
+        client_id: config.id,
         client_secret: CLIENT_SECRET,
         grant_type: Helpers.OAuth2GrantTypes.AUTHORIZATION_CODE,
         redirect_uri: REDIRECT_URL,
@@ -69,7 +69,7 @@ const VerifyUser = async (code: string, xgmid: number) => {
         return { code: 500 };
     }
 
-    if(user.id == CLIENT_ID)
+    if(user.id == config.id)
         return { code: 418 };
 
     let retCode;
@@ -142,7 +142,7 @@ const webApiFuncs: {
         const id = FindAuthUser(xgmid);
         if(!id) return response.statusCode = 200;
 
-        if(id == CLIENT_ID)
+        if(id == config.id)
             return response.statusCode = 418;
 
         Logger.Log(`Verify: delete! ${id}`);
@@ -170,7 +170,7 @@ const webApiFuncs: {
         const id = FindAuthUser(xgmid);
         if(!id) return response.statusCode = 200;
 
-        if(id == CLIENT_ID)
+        if(id == config.id)
             return response.statusCode = 418;
 
         UpdateUserState(id, xgmid);
@@ -185,7 +185,7 @@ const webApiFuncs: {
         const id = FindAuthUser(xgmid);
         if(!id) return response.statusCode = 404;
 
-        if(id == CLIENT_ID)
+        if(id == config.id)
             return response.statusCode = 418;
 
         const data = await ReadIncomingData(request);
