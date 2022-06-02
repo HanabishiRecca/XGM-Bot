@@ -15,6 +15,7 @@ export const {
     WH_LOG_ID = Shutdown('Log webhook id required.'),
     WH_LOG_TOKEN = Shutdown('Log webhook token required.'),
     AUTH_SVC = Shutdown('Server auth required.'),
+    SVC_PORT = Shutdown('Server port required.'),
     CLIENT_SECRET = Shutdown('Client secret required.'),
     REDIRECT_URL = Shutdown('Redirect URL required.'),
     WH_SYSLOG_ID = Shutdown('System log webhook id required.'),

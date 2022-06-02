@@ -1,7 +1,7 @@
 import Logger from '../util/log';
 import { SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users';
 import { ReadIncomingData } from '../util/request';
-import { AUTH_SVC, CLIENT_SECRET, REDIRECT_URL, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process';
+import { AUTH_SVC, CLIENT_SECRET, REDIRECT_URL, SVC_PORT, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process';
 import { config, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state';
 import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
@@ -246,4 +246,4 @@ createServer(async (request, response) => {
     });
     response.end();
     Logger.Log(`Response end. Code: ${response.statusCode}`);
-}).listen(80);
+}).listen(Number(SVC_PORT));
