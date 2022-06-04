@@ -11,7 +11,7 @@ const
     MESSAGE_MAX_CHARS = 2000;
 
 const SendPM = async (recipient_id: string, content: string) => {
-    const channel = await Actions.User.CreateDM({ recipient_id }).catch(Logger.Error);
+    const channel = await Actions.DM.Create({ recipient_id }).catch(Logger.Error);
     if(!channel) return;
     Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
 };

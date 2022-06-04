@@ -141,6 +141,7 @@ export const RegisterCommands = (id: string) => {
     Actions.Application.BulkOverwriteGuildCommands(id, botConfig.server, [
         {
             name: 'who',
+            type: Helpers.ApplicationCommandTypes.CHAT_INPUT,
             description: 'Показать информацию о пользователе.',
             options: [
                 {
@@ -158,8 +159,8 @@ export const RegisterCommands = (id: string) => {
             ],
         },
         {
-            name: 'Идентификация',
             type: Helpers.ApplicationCommandTypes.USER,
+            name: 'Идентификация',
         },
     ]);
 };
