@@ -217,6 +217,26 @@ const webApiFuncs: {
         SendSysLogMsg(String(data)).catch(Logger.Error);
         response.statusCode = 200;
     },
+
+    '/pull': async (request, response) => {
+        const channelid = request.headers['channelid'];
+        if(typeof channelid != 'string')
+            return response.statusCode = 400;
+
+        const
+            count = Number(request.headers['count']),
+            messages = await Actions.Channel.GetMessages(channelid, count ? {
+                limit: Math.min(Math.max(count, 1), 100),
+            } : undefined).catch(({ code }: { code: number; }) => code);
+
+        if(!Array.isArray(messages))
+            return response.statusCode = Number(messages) ?? 500;
+
+        const data = JSON.stringify(messages);
+        response.setHeader('Content-Length', Buffer.byteLength(data));
+        response.write(data);
+        response.statusCode = 200;
+    },
 };
 
 const HandleRequest = async (request: IncomingMessage, response: ServerResponse) => {
