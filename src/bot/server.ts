@@ -48,8 +48,46 @@ const UpdateUserState = async (id: string, xgmid?: number) => {
     }
 };
 
+const UpdateUserRecord = (id: string, xgmid: number) => {
+    const exist = AuthUsers.get(id);
+
+    if(exist) {
+        if(exist == xgmid) {
+            SendPM(id, 'Аккаунт уже подтвержден.');
+            return 208;
+        }
+
+        AuthUsers.set(id, xgmid);
+        SaveAuthUsers();
+        SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(exist)}>`);
+        SendPM(id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
+
+        return 200;
+    }
+
+    const prev = FindAuthUser(xgmid);
+
+    if(prev) {
+        Logger.Log(`Verify: remove ${id}`);
+        AuthUsers.delete(prev);
+        UpdateUserState(prev);
+    }
+
+    Logger.Log(`Verify: ${id} -> ${xgmid}`);
+    AuthUsers.set(id, xgmid);
+    SaveAuthUsers();
+
+    SendLogMsg(prev ?
+        `Перепривязка аккаунта Discord ${Tools.Mention.User(id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(prev)}` :
+        `Привязка аккаунта ${Tools.Mention.User(id)} :white_check_mark: ${GenXgmUserLink(xgmid)}`
+    );
+    SendPM(id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
+
+    return 200;
+};
+
 const VerifyUser = async (code: string, xgmid: number) => {
-    const res = await Actions.OAuth2.TokenExchange({
+    const auth = await Actions.OAuth2.TokenExchange({
         client_id: config.id,
         client_secret: CLIENT_SECRET,
         grant_type: Helpers.OAuth2GrantTypes.AUTHORIZATION_CODE,
@@ -58,12 +96,15 @@ const VerifyUser = async (code: string, xgmid: number) => {
         code,
     }).catch(Logger.Warn);
 
-    if(!res) {
+    if(!auth) {
         Logger.Warn('Verify: token request failed.');
         return { code: 400 };
     }
 
-    const user = await Actions.User.Get('@me', { authorization: new Authorization(res.access_token, Helpers.TokenTypes.BEARER) }).catch(Logger.Error);
+    const user = await Actions.User.Get('@me', {
+        authorization: new Authorization(auth.access_token, Helpers.TokenTypes.BEARER),
+    }).catch(Logger.Error);
+
     if(!user) {
         Logger.Warn('Verify: user request failed.');
         return { code: 500 };
@@ -72,48 +113,17 @@ const VerifyUser = async (code: string, xgmid: number) => {
     if(user.id == config.id)
         return { code: 418 };
 
-    let retCode;
-    const xid = AuthUsers.get(user.id);
-    if(xid) {
-        if(xid == xgmid) {
-            SendPM(user.id, 'Аккаунт уже подтвержден.');
-            retCode = 208;
-        } else {
-            AuthUsers.set(user.id, xgmid);
-            SaveAuthUsers();
-            SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(xid)}>`);
-            SendPM(user.id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
-            retCode = 200;
-        }
-    } else {
-        const prev = FindAuthUser(xgmid);
-        if(prev) {
-            Logger.Log(`Verify: remove ${user.id}`);
-            AuthUsers.delete(prev);
-            UpdateUserState(prev);
-        }
-
-        Logger.Log(`Verify: ${user.id} -> ${xgmid}`);
-        AuthUsers.set(user.id, xgmid);
-        SaveAuthUsers();
-
-        SendLogMsg(prev ?
-            `Перепривязка аккаунта Discord ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(prev)}` :
-            `Привязка аккаунта ${Tools.Mention.User(user.id)} :white_check_mark: ${GenXgmUserLink(xgmid)}`
-        );
-        SendPM(user.id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
-
-        retCode = 200;
-    }
-
+    const result = UpdateUserRecord(user.id, xgmid);
     UpdateUserState(user.id, xgmid);
 
-    return { code: retCode, content: user.id };
+    return { code: result, content: user.id };
 };
 
 const SendSysLogMsg = async (content: string) => {
     for(let i = 0; i < content.length; i += MESSAGE_MAX_CHARS)
-        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, { content: content.substring(i, i + MESSAGE_MAX_CHARS) });
+        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, {
+            content: content.substring(i, i + MESSAGE_MAX_CHARS),
+        });
 };
 
 const webApiFuncs: {
@@ -204,10 +214,14 @@ const webApiFuncs: {
         const data = await ReadIncomingData(request);
         if(!data) return response.statusCode = 400;
 
-        response.statusCode =
-            await Actions.Message.Create(channelid, {
-                content: String(data).substring(0, MESSAGE_MAX_CHARS),
-            }).then(() => 200).catch((e) => (Logger.Error(e), e?.code ?? 500));
+        response.statusCode = 200;
+
+        await Actions.Message.Create(channelid, {
+            content: String(data).substring(0, MESSAGE_MAX_CHARS),
+        }).catch((e: { code: number; }) => {
+            Logger.Error(e);
+            response.statusCode = e.code ?? 500;
+        });
     },
 
     '/sys': async (request, response) => {
@@ -219,23 +233,25 @@ const webApiFuncs: {
     },
 
     '/pull': async (request, response) => {
-        const channelid = request.headers['channelid'];
+        const
+            channelid = request.headers['channelid'],
+            count = Number(request.headers['count']);
+
         if(typeof channelid != 'string')
             return response.statusCode = 400;
 
-        const
-            count = Number(request.headers['count']),
-            messages = await Actions.Channel.GetMessages(channelid, count ? {
-                limit: Math.min(Math.max(count, 1), 100),
-            } : undefined).catch(({ code }: { code: number; }) => code);
+        const messages = await Actions.Channel.GetMessages(channelid, count ? {
+            limit: Math.min(Math.max(count, 1), 100),
+        } : undefined).catch(({ code }: { code: number; }) => code);
 
         if(!Array.isArray(messages))
             return response.statusCode = Number(messages) ?? 500;
 
+        response.statusCode = 200;
+
         const data = JSON.stringify(messages);
         response.setHeader('Content-Length', Buffer.byteLength(data));
         response.write(data);
-        response.statusCode = 200;
     },
 };
 
