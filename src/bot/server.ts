@@ -126,8 +126,8 @@ const SendSysLogMsg = async (content: string) => {
         });
 };
 
-const AttachXgmId = (user: Types.User & { xgmid?: number; }) =>
-    user.xgmid = AuthUsers.get(user.id);
+const AttachXgmId = (user: Types.User & { xgmId?: number; }) =>
+    user.xgmId = AuthUsers.get(user.id);
 
 const ResolveMessage = ({ author, mentions, referenced_message }: Types.Message) => {
     AttachXgmId(author);
