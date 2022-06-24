@@ -3,7 +3,7 @@ import { SyncUser, ClearUser, GenXgmUserLink, MemberPart } from '../util/users';
 import { ReadIncomingData } from '../util/request';
 import { AUTH_SVC, CLIENT_SECRET, REDIRECT_URL, SVC_PORT, WH_SYSLOG_ID, WH_SYSLOG_TOKEN } from './process';
 import { config, AuthUsers, SaveAuthUsers, FindAuthUser, SendLogMsg } from './state';
-import { Authorization, Actions, Helpers, Tools } from 'discord-slim';
+import { Authorization, Actions, Helpers, Tools, Types } from 'discord-slim';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 
 const
@@ -124,6 +124,15 @@ const SendSysLogMsg = async (content: string) => {
         await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, {
             content: content.substring(i, i + MESSAGE_MAX_CHARS),
         });
+};
+
+const AttachXgmId = (user: Types.User & { xgmid?: number; }) =>
+    user.xgmid = AuthUsers.get(user.id);
+
+const ResolveMessage = ({ author, mentions, referenced_message }: Types.Message) => {
+    AttachXgmId(author);
+    mentions?.forEach(AttachXgmId);
+    referenced_message && ResolveMessage(referenced_message);
 };
 
 const webApiFuncs: {
@@ -247,6 +256,7 @@ const webApiFuncs: {
         if(!Array.isArray(messages))
             return response.statusCode = Number(messages) ?? 500;
 
+        messages.forEach(ResolveMessage);
         response.statusCode = 200;
 
         const data = JSON.stringify(messages);
