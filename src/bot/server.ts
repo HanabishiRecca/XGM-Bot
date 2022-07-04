@@ -68,7 +68,7 @@ const UpdateUserRecord = (id: string, xgmid: number) => {
     const prev = FindAuthUser(xgmid);
 
     if(prev) {
-        Logger.Log(`Verify: remove ${id}`);
+        Logger.Log(`Verify: remove ${prev}`);
         AuthUsers.delete(prev);
         UpdateUserState(prev);
     }
