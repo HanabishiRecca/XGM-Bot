@@ -10,11 +10,25 @@ const
     MAX_PAYLOAD = 8192,
     MESSAGE_MAX_CHARS = 2000;
 
-const SendPM = async (recipient_id: string, content: string) => {
-    const channel = await Actions.DM.Create({ recipient_id }).catch(Logger.Error);
-    if(!channel) return;
-    Actions.Message.Create(channel.id, { content }).catch(Logger.Warn);
-};
+const SendPM = (() => {
+    const cache = new Map<string, string>();
+
+    const GetCh = async (recipient_id: string) => {
+        const cache_id = cache.get(recipient_id);
+        if(cache_id) return cache_id;
+
+        const { id } = await Actions.DM.Create({ recipient_id });
+        cache.set(recipient_id, id);
+        return id;
+    };
+
+    return async (recipient_id: string, content: string) => {
+        await Actions.Message.Create(await GetCh(recipient_id), { content });
+    };
+})();
+
+const SendPMI = (recipient_id: string, content: string) =>
+    SendPM(recipient_id, content).catch(Logger.Warn);
 
 const FilterRejection = (e: { code: number; }) => {
     if(e.code != 404) throw e;
@@ -53,14 +67,14 @@ const UpdateUserRecord = (id: string, xgmid: number) => {
 
     if(exist) {
         if(exist == xgmid) {
-            SendPM(id, 'Аккаунт уже подтвержден.');
+            SendPMI(id, 'Аккаунт уже подтвержден.');
             return 208;
         }
 
         AuthUsers.set(id, xgmid);
         SaveAuthUsers();
         SendLogMsg(`Перепривязка аккаунта XGM ${Tools.Mention.User(id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был <${GenXgmUserLink(exist)}>`);
-        SendPM(id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
+        SendPMI(id, `:white_check_mark: Аккаунт перепривязан!\n${GenXgmUserLink(xgmid)}`);
 
         return 200;
     }
@@ -81,7 +95,7 @@ const UpdateUserRecord = (id: string, xgmid: number) => {
         `Перепривязка аккаунта Discord ${Tools.Mention.User(id)} :white_check_mark: ${GenXgmUserLink(xgmid)}\nСтарый аккаунт был ${Tools.Mention.User(prev)}` :
         `Привязка аккаунта ${Tools.Mention.User(id)} :white_check_mark: ${GenXgmUserLink(xgmid)}`
     );
-    SendPM(id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
+    SendPMI(id, `:white_check_mark: Аккаунт подтвержден!\n${GenXgmUserLink(xgmid)}`);
 
     return 200;
 };
@@ -175,7 +189,7 @@ const webApiFuncs: {
             reason = data ? `**Причина:** ${data}` : '';
 
         SendLogMsg(`Отвязка аккаунта ${Tools.Mention.User(id)} :no_entry: ${GenXgmUserLink(xgmid)}\n${reason}`);
-        SendPM(id, `:no_entry: Аккаунт деавторизован.\n${reason}`);
+        SendPMI(id, `:no_entry: Аккаунт деавторизован.\n${reason}`);
 
         response.statusCode = 200;
     },
@@ -210,9 +224,14 @@ const webApiFuncs: {
         const data = await ReadIncomingData(request);
         if(!data) return response.statusCode = 400;
 
-        SendPM(id, String(data).substring(0, MESSAGE_MAX_CHARS));
-
         response.statusCode = 200;
+
+        await SendPM(id,
+            String(data).substring(0, MESSAGE_MAX_CHARS),
+        ).catch((e: { code: number; }) => {
+            Logger.Warn(e);
+            response.statusCode = e.code ?? 500;
+        });
     },
 
     '/send': async (request, response) => {
