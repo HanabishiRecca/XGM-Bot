@@ -9,8 +9,10 @@ export const GenXgmUserLink = (xgmid: number) => `https://xgm.guru/user/${xgmid}
 
 export type MemberPart = Pick<Types.Member, 'user'> & Partial<Pick<Types.Member, 'roles' | 'nick'>>;
 
+const projectStatuses = ["leader", "moderator", "active", "guest"];
+
 const IsInProject = (status?: string | null) =>
-    Boolean(status) && ((status == 'active') || (status == 'moderator') || (status == 'leader'));
+    status ? projectStatuses.includes(status) : false;
 
 const DiffRoles = (roles: string[], flags?: boolean[]) => {
     const rs = new Set<string>();
