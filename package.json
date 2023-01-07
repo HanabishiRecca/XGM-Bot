@@ -2,7 +2,7 @@
     "main": "app/bot.js",
     "type": "module",
     "scripts": {
-        "build": "esbuild 'src/'*'.ts' --outdir='app' --bundle --platform=node --format=esm --external:'./node_modules/*' --analyze",
+        "build": "esbuild 'src/'*'.ts' --outdir='app' --bundle --platform=node --format=esm --packages=external --analyze",
         "start": "node --expose-gc ."
     },
     "dependencies": {
@@ -11,6 +11,6 @@
     },
     "devDependencies": {
         "@types/node": "*",
-        "esbuild": "0.15"
+        "esbuild": "0.16"
     }
 }
