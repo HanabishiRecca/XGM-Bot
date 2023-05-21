@@ -1,9 +1,9 @@
 import Logger from '../util/log';
 
-export const Shutdown = (e: any) => {
-    Logger.Error(e);
+export const Shutdown = (e: unknown, ok?: boolean) => {
+    ok ? Logger.Log(e) : Logger.Error(e);
     Logger.Log('SHUTDOWN');
-    process.exit(1);
+    process.exit(ok ? 0 : 1);
 };
 
 process.on('uncaughtException', Shutdown);

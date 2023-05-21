@@ -31,9 +31,9 @@ process.on('exit', () => {
     writeFileSync(SESSION_FILE, `${session.id}\n${session.seq}`, { encoding: 'utf8' });
 });
 
-process.on('SIGTERM', Shutdown);
-process.on('SIGINT', Shutdown);
-process.on('SIGHUP', Shutdown);
+process.on('SIGTERM', (e) => Shutdown(e, true));
+process.on('SIGINT', (e) => Shutdown(e, true));
+process.on('SIGHUP', (e) => Shutdown(e, true));
 
 const LoadSession = () => {
     let content: string;
