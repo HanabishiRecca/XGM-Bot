@@ -127,7 +127,7 @@ const DoSync = async (
         IsInProject(staff_status),
         IsInProject(projects['833']?.status),
         seeTwilight,
-    ]), ((nick ?? username) == xgmname) ? undefined : xgmname);
+    ]), (nick == xgmname) ? undefined : xgmname);
 };
 
 const syncLock = new Set<string>();
