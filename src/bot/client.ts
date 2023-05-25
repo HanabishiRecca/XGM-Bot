@@ -25,7 +25,8 @@ client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
-process.on('exit', () => {
+process.on('exit', (code) => {
+    if(code == 0) return;
     const { session } = client;
     if(!session) return;
     writeFileSync(SESSION_FILE, `${session.id}\n${session.seq}`, { encoding: 'utf8' });
