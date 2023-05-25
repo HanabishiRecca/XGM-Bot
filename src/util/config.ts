@@ -1,7 +1,6 @@
-import { readFileSync } from 'fs';
+import { readFileSync } from "fs";
 
 type Configs = {
-
     bot: {
         id: string;
         server: string;
@@ -22,10 +21,11 @@ type Configs = {
     users: {
         roles: string[];
     };
-
 };
 
-const readOptions = { encoding: 'utf8' } as const;
+const readOptions = { encoding: "utf8" } as const;
 
 export const LoadConfig = <T extends keyof Configs>(name: T) =>
-    JSON.parse(readFileSync(`${process.cwd()}/config/${name}.json`, readOptions)) as Configs[T];
+    JSON.parse(
+        readFileSync(`${process.cwd()}/config/${name}.json`, readOptions),
+    ) as Configs[T];

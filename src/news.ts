@@ -1,53 +1,60 @@
-import Logger from './util/log';
+import Logger from "./util/log";
 
 const Shutdown = (e: any) => {
     Logger.Error(e);
     process.exit(1);
 };
 
-process.on('uncaughtException', Shutdown);
-process.on('unhandledRejection', Shutdown);
+process.on("uncaughtException", Shutdown);
+process.on("unhandledRejection", Shutdown);
 
 const {
-    WH_NEWS_ID = Shutdown('News webhook id required.'),
-    WH_NEWS_TOKEN = Shutdown('News webhook token required.'),
-    STORAGE = Shutdown('Storage path required.'),
-    TOKEN = Shutdown('Bot token required.'),
+    WH_NEWS_ID = Shutdown("News webhook id required."),
+    WH_NEWS_TOKEN = Shutdown("News webhook token required."),
+    STORAGE = Shutdown("Storage path required."),
+    TOKEN = Shutdown("Bot token required."),
 } = process.env;
 
-import { LoadConfig } from './util/config';
-import { HttpsGet } from './util/request';
-import { readFileSync, writeFileSync, renameSync } from 'fs';
-import { XMLParser } from 'fast-xml-parser';
-import { Authorization, Actions } from 'discord-slim';
+import { LoadConfig } from "./util/config";
+import { HttpsGet } from "./util/request";
+import { readFileSync, writeFileSync, renameSync } from "fs";
+import { XMLParser } from "fast-xml-parser";
+import { Authorization, Actions } from "discord-slim";
 
-const
-    config = LoadConfig('news'),
-    TIMESTAMP_FILE = `${STORAGE}/news_timestamp`,
-    FEED_URL = 'https://xgm.guru/rss';
+const config = LoadConfig("news");
+const TIMESTAMP_FILE = `${STORAGE}/news_timestamp`;
+const FEED_URL = "https://xgm.guru/rss";
 
 Actions.setDefaultRequestOptions({
     authorization: new Authorization(TOKEN),
     rateLimit: {
         retryCount: 1,
         callback: (response, attempts) =>
-            Logger.Warn(`${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`),
+            Logger.Warn(
+                `${response.message} Global: ${response.global}. Cooldown: ${response.retry_after} sec. Attempt: ${attempts}.`,
+            ),
     },
 });
 
 const DecodeHtmlEntity = (() => {
-    const
-        htmlEntities: Record<string, string> = { nbsp: ' ', amp: '&', quot: '"', lt: '<', gt: '>' },
-        decodeEntity = (_: string, dec: string) => htmlEntities[dec] ?? '',
-        decodeSymbol = (_: string, dec: string) => String.fromCodePoint(Number(dec)),
-        re = /&(nbsp|amp|quot|lt|gt);/g,
-        rc = /&#(\d+);/g;
+    const htmlEntities: Record<string, string> = {
+        nbsp: " ",
+        amp: "&",
+        quot: '"',
+        lt: "<",
+        gt: ">",
+    };
+    const decodeEntity = (_: string, dec: string) => htmlEntities[dec] ?? "";
+    const decodeSymbol = (_: string, dec: string) =>
+        String.fromCodePoint(Number(dec));
+    const re = /&(nbsp|amp|quot|lt|gt);/g;
+    const rc = /&#(\d+);/g;
 
-    return (str: string) => str.replace(re, decodeEntity).replace(rc, decodeSymbol);
+    return (str: string) =>
+        str.replace(re, decodeEntity).replace(rc, decodeSymbol);
 })();
 
-const CleanupHtml = (str: string) =>
-    str.replace(/<\/?[^<>]*>/gm, '');
+const CleanupHtml = (str: string) => str.replace(/<\/?[^<>]*>/gm, "");
 
 type FeedItem = {
     title: string;
@@ -67,14 +74,14 @@ type ItemInfo = {
 
 const FetchFeed = async () => {
     const data = await HttpsGet(FEED_URL);
-    if(!data) throw 'No feed data received.';
+    if (!data) throw "No feed data received.";
 
     const items = new XMLParser({
         ignoreAttributes: false,
-        attributeNamePrefix: '',
+        attributeNamePrefix: "",
     }).parse(data)?.rss?.channel?.item as FeedItem[] | undefined;
 
-    if(!items) throw 'Incorrect feed data received.';
+    if (!items) throw "Incorrect feed data received.";
     return items;
 };
 
@@ -92,7 +99,7 @@ const GenEmbed = ({ item, date }: ItemInfo) => ({
     },
 });
 
-const GenThreadName = (s: string) => s.replace(/[\/\\]/g, '|');
+const GenThreadName = (s: string) => s.replace(/[\/\\]/g, "|");
 
 const EditMessage = async (info: ItemInfo, id: string) => {
     const embed = GenEmbed(info);
@@ -124,43 +131,42 @@ const PostMessage = async (info: ItemInfo) => {
 };
 
 const PostNews = async (infos: ItemInfo[]) => {
-    const
-        webhook = await Actions.Webhook.GetWithToken(WH_NEWS_ID, WH_NEWS_TOKEN),
-        messages = await Actions.Channel.GetMessages(webhook.channel_id, { limit: config.back_messages_limit });
+    const webhook = await Actions.Webhook.GetWithToken(
+        WH_NEWS_ID,
+        WH_NEWS_TOKEN,
+    );
+    const messages = await Actions.Channel.GetMessages(webhook.channel_id, {
+        limit: config.back_messages_limit,
+    });
 
     const FindExisting = (link: string) => {
-        if(!link) return;
+        if (!link) return;
         return messages.find(({ embeds }) => embeds?.[0]?.url == link)?.id;
     };
 
-    for(const info of infos) {
+    for (const info of infos) {
         const id = FindExisting(info.item.link);
-        await (id ?
-            EditMessage(info, id) :
-            PostMessage(info)
-        );
+        await (id ? EditMessage(info, id) : PostMessage(info));
     }
 };
 
 const CheckNews = async (checkTime?: number) => {
-    if(!checkTime) return Date.now();
+    if (!checkTime) return Date.now();
 
-    Logger.Log('Fetching rss feed...');
+    Logger.Log("Fetching rss feed...");
     const items = await FetchFeed();
 
-    Logger.Log('Processing feed...');
+    Logger.Log("Processing feed...");
 
-    const infos = items.map((item) => ({
-        date: new Date(item.pubDate),
-        item,
-    } as ItemInfo)).filter(
-        ({ date }) => date.getTime() > checkTime,
-    ).reverse();
+    const infos = items
+        .map((item) => ({ date: new Date(item.pubDate), item } as ItemInfo))
+        .filter(({ date }) => date.getTime() > checkTime)
+        .reverse();
 
     Logger.Log(`News count: ${infos.length}`);
-    if(!infos.length) return;
+    if (!infos.length) return;
 
-    Logger.Log('Posting...');
+    Logger.Log("Posting...");
     await PostNews(infos);
 
     return infos.reduce(
@@ -171,30 +177,30 @@ const CheckNews = async (checkTime?: number) => {
 
 const ReadTimestamp = () => {
     try {
-        return Number(readFileSync(TIMESTAMP_FILE, { encoding: 'utf8' }));
-    } catch(e: any) {
-        if(e?.code != 'ENOENT') throw e;
+        return Number(readFileSync(TIMESTAMP_FILE, { encoding: "utf8" }));
+    } catch (e: any) {
+        if (e?.code != "ENOENT") throw e;
     }
 };
 
 const WriteTimestamp = (timestamp: number) => {
     const np = `${TIMESTAMP_FILE}.new`;
-    writeFileSync(np, String(timestamp), { encoding: 'utf8' });
+    writeFileSync(np, String(timestamp), { encoding: "utf8" });
     renameSync(np, TIMESTAMP_FILE);
 };
 
 const StartJob = async () => {
-    Logger.Log('Loading data...');
+    Logger.Log("Loading data...");
 
     const result = await CheckNews(ReadTimestamp());
-    if(!result) return;
+    if (!result) return;
 
-    Logger.Log('Saving data...');
+    Logger.Log("Saving data...");
     WriteTimestamp(result);
 };
 
 (async () => {
-    Logger.Log('News check job start.');
+    Logger.Log("News check job start.");
     await StartJob();
-    Logger.Log('News check job finished.');
+    Logger.Log("News check job finished.");
 })();
