@@ -9,7 +9,7 @@
         "removeComments": true,
         "noUncheckedIndexedAccess": true,
         "noPropertyAccessFromIndexSignature": true,
-        "lib": []
+        "lib": ["ES2020"]
     },
     "include": [
         "src/*.ts"
