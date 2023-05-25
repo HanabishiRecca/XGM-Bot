@@ -92,10 +92,19 @@ const GenEmbed = ({ item, date }: ItemInfo) => ({
     },
 });
 
-const EditMessage = (info: ItemInfo, id: string) =>
-    Actions.Webhook.EditMessage(WH_NEWS_ID, WH_NEWS_TOKEN, id, {
-        embeds: [GenEmbed(info)],
+const GenThreadName = (s: string) => s.replace(/[\/\\]/g, '|');
+
+const EditMessage = async (info: ItemInfo, id: string) => {
+    const embed = GenEmbed(info);
+
+    await Actions.Webhook.EditMessage(WH_NEWS_ID, WH_NEWS_TOKEN, id, {
+        embeds: [embed],
     });
+
+    await Actions.Thread.Modify(id, {
+        name: GenThreadName(embed.title),
+    });
+};
 
 const PostMessage = async (info: ItemInfo) => {
     const embed = GenEmbed(info);
@@ -110,7 +119,7 @@ const PostMessage = async (info: ItemInfo) => {
     await Actions.Message.Crosspost(channel_id, id).catch(Logger.Error);
 
     await Actions.Thread.StartWithMessage(channel_id, id, {
-        name: embed.title.replace(/[\/\\]/g, '|'),
+        name: GenThreadName(embed.title),
     }).catch(Logger.Error);
 };
 
