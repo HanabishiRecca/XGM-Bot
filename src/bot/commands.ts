@@ -8,65 +8,42 @@ import {
     MemberPart,
 } from "../util/users";
 import { config as botConfig, AuthUsers } from "./state";
-import { Actions, Helpers, Tools, Types } from "discord-slim";
+import { Actions, Helpers, Types } from "discord-slim";
 
 const OPTION_USER = "user";
 const OPTION_PUBLIC = "public";
 const config = LoadConfig("commands");
 
-const GenUserInfoEmbeds = async (member: MemberPart) => {
-    const embeds: Types.Embed[] = [];
-    const { user } = member;
-
-    embeds.push({
-        title: `${user.username}\`#${user.discriminator}\``,
-        thumbnail: {
-            url: Tools.Resource.UserAvatar(user),
-        },
-        color: config.embed_message_color,
-        fields: [
-            {
-                name: "Дата создания",
-                value: Tools.Format.Timestamp(
-                    Tools.Utils.GetUserCreationDate(user),
-                    Helpers.TimestampStyles.SHORT_DATE_TIME,
-                ),
-            },
-        ],
-    });
-
-    const xgmid = AuthUsers.get(user.id);
+const GenUserInfo = async (member: MemberPart): Promise<Types.Embed> => {
+    const xgmid = AuthUsers.get(member.user.id);
     if (!xgmid) {
         ClearUser(botConfig.server, member);
-        embeds.push({
+        return {
             description: "Нет привязки к XGM.",
             color: config.embed_error_color,
-        });
-        return embeds;
+        };
     }
 
     const xgmuser = await RequestXgmUser(xgmid).catch(Logger.Error);
     if (!xgmuser) {
-        embeds.push({
+        return {
             description: "Ошибка запроса к XGM.",
             color: config.embed_error_color,
-        });
-        return embeds;
+        };
     }
 
     const { info } = xgmuser;
     if (!info) {
         ClearUser(botConfig.server, member);
-        embeds.push({
+        return {
             description: "Привязан к несуществующему пользователю XGM.",
             color: config.embed_error_color,
-        });
-        return embeds;
+        };
     }
 
     SyncUser(botConfig.server, member, xgmid, false, xgmuser);
 
-    embeds.push({
+    return {
         title: info.user.username,
         url: GenXgmUserLink(xgmid),
         thumbnail: {
@@ -85,9 +62,7 @@ const GenUserInfoEmbeds = async (member: MemberPart) => {
             },
         ],
         color: config.embed_message_color,
-    });
-
-    return embeds;
+    };
 };
 
 const FindOption = (options: Types.InteractionDataOption[], name: string) =>
@@ -119,7 +94,7 @@ const ExtractInteractionData = async (
     }
 
     return {
-        embeds: await GenUserInfoEmbeds(member),
+        embeds: [await GenUserInfo(member)],
         flags: show
             ? Helpers.MessageFlags.NO_FLAGS
             : Helpers.MessageFlags.EPHEMERAL,
