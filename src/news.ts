@@ -153,19 +153,13 @@ const PostNews = async (infos: ItemInfo[]) => {
 const CheckNews = async (checkTime?: number) => {
     if (!checkTime) return Date.now();
 
-    Logger.Log("Fetching rss feed...");
-    const items = await FetchFeed();
-
-    Logger.Log("Processing feed...");
-
-    const infos = items
+    const infos = (await FetchFeed())
         .map((item) => ({ date: new Date(item.pubDate), item } as ItemInfo))
         .filter(({ date }) => date.getTime() > checkTime)
         .reverse();
 
-    Logger.Log(`News count: ${infos.length}`);
     if (!infos.length) return;
-
+    Logger.Log(`News count: ${infos.length}`);
     Logger.Log("Posting...");
     await PostNews(infos);
 
@@ -189,18 +183,10 @@ const WriteTimestamp = (timestamp: number) => {
     renameSync(np, TIMESTAMP_FILE);
 };
 
-const StartJob = async () => {
-    Logger.Log("Loading data...");
-
+(async () => {
     const result = await CheckNews(ReadTimestamp());
     if (!result) return;
 
     Logger.Log("Saving data...");
     WriteTimestamp(result);
-};
-
-(async () => {
-    Logger.Log("News check job start.");
-    await StartJob();
-    Logger.Log("News check job finished.");
 })();
