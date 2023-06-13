@@ -17,10 +17,23 @@ const INTENTS =
 const SESSION_FILE = `${STORAGE}/session`;
 const client = new Client();
 
-client.on(ClientEvents.CONNECT, () => Logger.Log("Connection established."));
+client.on(ClientEvents.CONNECT, () => {
+    Logger.Log("Connection established.");
+
+    const { session } = client;
+    if (!session) {
+        Logger.Warn("Unknown session.");
+        return;
+    }
+
+    const { id, seq } = session;
+    Logger.Log("Session:", id, seq);
+});
+
 client.on(ClientEvents.DISCONNECT, (code) =>
     Logger.Error(`Disconnect. (${code})`),
 );
+
 client.on(ClientEvents.INFO, Logger.Log);
 client.on(ClientEvents.WARN, Logger.Warn);
 client.on(ClientEvents.ERROR, Logger.Error);
@@ -29,7 +42,8 @@ client.on(ClientEvents.FATAL, Shutdown);
 process.on("exit", () => {
     const { session } = client;
     if (!session) return;
-    writeFileSync(SESSION_FILE, `${session.id}\n${session.seq}`, {
+    const { id, seq } = session;
+    writeFileSync(SESSION_FILE, `${id}\n${seq}`, {
         encoding: "utf8",
     });
 });
@@ -44,9 +58,11 @@ const LoadSession = () => {
     try {
         content = readFileSync(SESSION_FILE, { encoding: "utf8" });
     } catch {
-        Logger.Warn("Session file not found.");
+        Logger.Log("Session file not found.");
         return;
     }
+
+    rmSync(SESSION_FILE, { force: true });
 
     const [id, seqs] = content.split("\n");
     if (!(id && seqs)) return;
@@ -54,9 +70,7 @@ const LoadSession = () => {
     const seq = Number(seqs);
     if (!(seq > 0)) return;
 
-    Logger.Log("Session:", id);
-    Logger.Log("Sequence:", seq);
-
+    Logger.Log("Session loaded:", id, seq);
     return { id, seq };
 };
 
@@ -73,7 +87,7 @@ const CheckUser = (member: MemberPart, banned: boolean) => {
 
 client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
-client.events.on(Events.GUILD_MEMBER_ADD, async (member) => {
+client.events.on(Events.GUILD_MEMBER_ADD, (member) => {
     if (!IsServer(member.guild_id)) return;
     SendLogMsg(
         `<:zplus:544205514943365123> ${Tools.Mention.User(
@@ -127,8 +141,6 @@ client.events.on(
 
 (() => {
     const session = LoadSession();
-    rmSync(SESSION_FILE, { force: true });
-
     session
         ? client.Resume(authorization, session)
         : client.Connect(authorization, INTENTS);
