@@ -6,11 +6,11 @@
         "start": "node --expose-gc ."
     },
     "dependencies": {
-        "discord-slim": "2.7",
-        "fast-xml-parser": "4.2"
+        "discord-slim": "2.7.0",
+        "fast-xml-parser": "4.2.7"
     },
     "devDependencies": {
         "@types/node": "*",
-        "esbuild": "0.17"
+        "esbuild": "0.19.2"
     }
 }
