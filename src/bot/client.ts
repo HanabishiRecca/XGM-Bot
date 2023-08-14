@@ -88,10 +88,12 @@ const CheckUser = (member: MemberPart, banned: boolean) => {
 client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
 client.events.on(Events.GUILD_MEMBER_ADD, (member) => {
-    if (!IsServer(member.guild_id)) return;
+    const { guild_id, user } = member;
+    Logger.Log("GUILD", guild_id, "MEMBER ADD", user.id);
+    if (!IsServer(guild_id)) return;
     SendLogMsg(
         `<:zplus:544205514943365123> ${Tools.Mention.User(
-            member.user,
+            user,
         )} присоединился к серверу.`,
     );
     CheckUser(member, false);
@@ -102,16 +104,15 @@ client.events.on(
     (member) => IsServer(member.guild_id) && CheckUser(member, false),
 );
 
-client.events.on(
-    Events.GUILD_MEMBER_REMOVE,
-    ({ guild_id, user }) =>
-        IsServer(guild_id) &&
-        SendLogMsg(
-            `<:zminus:544205486073839616> ${Tools.Mention.User(
-                user,
-            )} покинул сервер.`,
-        ),
-);
+client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user }) => {
+    Logger.Log("GUILD", guild_id, "MEMBER REMOVE", user.id);
+    if (!IsServer(guild_id)) return;
+    SendLogMsg(
+        `<:zminus:544205486073839616> ${Tools.Mention.User(
+            user,
+        )} покинул сервер.`,
+    );
+});
 
 client.events.on(
     Events.MESSAGE_REACTION_ADD,
@@ -124,20 +125,23 @@ client.events.on(
 );
 
 client.events.on(Events.GUILD_CREATE, ({ id, emojis }) => {
+    Logger.Log("GUILD CREATE", id);
     if (!IsServer(id)) return;
     RegisterCommands(config.id);
     SetMarks(emojis);
 });
 
-client.events.on(
-    Events.GUILD_BAN_ADD,
-    ({ guild_id, user }) => IsServer(guild_id) && CheckUser({ user }, true),
-);
+client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user }) => {
+    Logger.Log("GUILD", guild_id, "BAN ADD", user.id);
+    if (!IsServer(guild_id)) return;
+    CheckUser({ user }, true);
+});
 
-client.events.on(
-    Events.GUILD_BAN_REMOVE,
-    ({ guild_id, user }) => IsServer(guild_id) && CheckUser({ user }, false),
-);
+client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user }) => {
+    Logger.Log("GUILD", guild_id, "BAN REMOVE", user.id);
+    if (!IsServer(guild_id)) return;
+    CheckUser({ user }, false);
+});
 
 (() => {
     const session = LoadSession();
