@@ -29,7 +29,6 @@ Actions.setDefaultRequestOptions({
 });
 
 export const SendLogMsg = (content: string) =>
-    Actions.Webhook.Execute(WH_LOG_ID, WH_LOG_TOKEN, {
-        content,
-        allowed_mentions: { parse: [] },
-    }).catch(Logger.Error);
+    Actions.Webhook.Execute(WH_LOG_ID, WH_LOG_TOKEN, { content }).catch(
+        Logger.Error,
+    );
