@@ -47,9 +47,7 @@ const GenUserInfo = async (member: MemberPart): Promise<Types.Embed> => {
         title: info.user.username,
         url: GenXgmUserLink(xgmid),
         thumbnail: {
-            url: info.avatar.big.startsWith("https:")
-                ? info.avatar.big
-                : `https://xgm.guru/${info.avatar.big}`,
+            url: info.avatar.exits ? `https://xgm.guru/${info.avatar.big}` : "",
         },
         fields: [
             {
