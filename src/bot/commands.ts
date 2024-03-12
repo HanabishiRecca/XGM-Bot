@@ -134,7 +134,7 @@ export const RegisterCommands = (id: string) => {
     if (done) return;
     done = true;
 
-    Actions.Application.BulkOverwriteGuildCommands(id, botConfig.server, [
+    Actions.Application.BulkOverwriteGlobalCommands(id, [
         {
             name: "who",
             type: Helpers.ApplicationCommandTypes.CHAT_INPUT,
