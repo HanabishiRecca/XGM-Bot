@@ -95,7 +95,7 @@ type XgmUser = {
 };
 
 export const RequestXgmUser = async (xgmid: number) => {
-    const data = await HttpsGet(`https://xgm.guru/api_user.php?id=${xgmid}`);
+    const data = await HttpsGet(`https://xgm.guru/api/v0/user/get/?id=${xgmid}`);
     if (!data) throw "Empty user response!";
     return JSON.parse(String(data)) as XgmUser;
 };
