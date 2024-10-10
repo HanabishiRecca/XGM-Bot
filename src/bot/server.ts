@@ -320,8 +320,6 @@ const HandleRequest = async (
 ) => {
     const { method, headers, url } = request;
 
-    Logger.Log(`${method} '${url}'`);
-
     if (method != "POST") return (response.statusCode = 405);
 
     if (headers["authorization"] != AUTH_SVC)
@@ -342,5 +340,7 @@ createServer(async (request, response) => {
         response.statusCode = 500;
     });
     response.end();
-    Logger.Log(`Response end. Code: ${response.statusCode}`);
+
+    if (response.statusCode == 200) return;
+    Logger.Log(`${response.statusCode} ${request.method} '${request.url}'`);
 }).listen(Number(SVC_PORT));
