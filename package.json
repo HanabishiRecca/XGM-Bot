@@ -2,7 +2,7 @@
     "main": "app/bot.js",
     "type": "module",
     "scripts": {
-        "build": "esbuild 'src/*.ts' --outdir='app' --bundle --platform=node --format=esm --packages=external --analyze",
+        "build": "esbuild 'src/*.ts' --outdir='app' --bundle --platform=node --format=esm --charset=utf8 --packages=external --analyze",
         "start": "node --expose-gc ."
     },
     "dependencies": {
