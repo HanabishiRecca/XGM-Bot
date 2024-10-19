@@ -115,7 +115,7 @@ export const HandleInteraction = async ({
     )
         return;
 
-    Logger.Log(`COMMAND: ${data.name} USER: ${member.user.username}`);
+    Logger.Debug(`COMMAND: ${data.name} USER: ${member.user.username}`);
 
     Actions.Application.CreateInteractionResponse(id, token, {
         type: Helpers.InteractionCallbackTypes.CHANNEL_MESSAGE_WITH_SOURCE,

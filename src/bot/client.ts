@@ -18,7 +18,7 @@ const SESSION_FILE = `${STORAGE}/session`;
 const client = new Client();
 
 client.on(ClientEvents.CONNECT, () => {
-    Logger.Log("Connection established.");
+    Logger.Debug("Connection established.");
 
     const { session } = client;
     if (!session) {
@@ -27,15 +27,17 @@ client.on(ClientEvents.CONNECT, () => {
     }
 
     const { id, seq } = session;
-    Logger.Log("Session:", id, seq);
+    Logger.Debug("Session:", id, seq);
 });
 
 client.on(ClientEvents.DISCONNECT, (code) =>
-    Logger.Error(`Disconnect. (${code})`),
+    Logger.Debug(`Disconnect. (${code})`),
 );
 
-client.on(ClientEvents.INFO, Logger.Log);
-client.on(ClientEvents.WARN, Logger.Warn);
+client.on(ClientEvents.INFO, Logger.Info);
+client.on(ClientEvents.WARN, (data) => {
+    data == "Server forced reconnect." ? Logger.Debug(data) : Logger.Warn(data);
+});
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
@@ -58,7 +60,7 @@ const LoadSession = () => {
     try {
         content = readFileSync(SESSION_FILE, { encoding: "utf8" });
     } catch {
-        Logger.Log("Session file not found.");
+        Logger.Debug("Session file not found.");
         return;
     }
 
@@ -70,7 +72,7 @@ const LoadSession = () => {
     const seq = Number(seqs);
     if (!(seq > 0)) return;
 
-    Logger.Log("Session loaded:", id, seq);
+    Logger.Debug("Session loaded:", id, seq);
     return { id, seq };
 };
 
@@ -89,7 +91,7 @@ client.events.on(Events.INTERACTION_CREATE, HandleInteraction);
 
 client.events.on(Events.GUILD_MEMBER_ADD, (member) => {
     const { guild_id, user } = member;
-    Logger.Log("GUILD", guild_id, "MEMBER ADD", user.id);
+    Logger.Info("GUILD", guild_id, "MEMBER ADD", user.id);
     if (!IsServer(guild_id)) return;
     SendLogMsg(
         `<:zplus:544205514943365123> ${Tools.Mention.User(
@@ -105,7 +107,7 @@ client.events.on(
 );
 
 client.events.on(Events.GUILD_MEMBER_REMOVE, ({ guild_id, user }) => {
-    Logger.Log("GUILD", guild_id, "MEMBER REMOVE", user.id);
+    Logger.Info("GUILD", guild_id, "MEMBER REMOVE", user.id);
     if (!IsServer(guild_id)) return;
     SendLogMsg(
         `<:zminus:544205486073839616> ${Tools.Mention.User(
@@ -125,20 +127,20 @@ client.events.on(
 );
 
 client.events.on(Events.GUILD_CREATE, ({ id, emojis }) => {
-    Logger.Log("GUILD CREATE", id);
+    Logger.Info("GUILD CREATE", id);
     if (!IsServer(id)) return;
     RegisterCommands(config.id);
     SetMarks(emojis);
 });
 
 client.events.on(Events.GUILD_BAN_ADD, ({ guild_id, user }) => {
-    Logger.Log("GUILD", guild_id, "BAN ADD", user.id);
+    Logger.Info("GUILD", guild_id, "BAN ADD", user.id);
     if (!IsServer(guild_id)) return;
     CheckUser({ user }, true);
 });
 
 client.events.on(Events.GUILD_BAN_REMOVE, ({ guild_id, user }) => {
-    Logger.Log("GUILD", guild_id, "BAN REMOVE", user.id);
+    Logger.Info("GUILD", guild_id, "BAN REMOVE", user.id);
     if (!IsServer(guild_id)) return;
     CheckUser({ user }, false);
 });

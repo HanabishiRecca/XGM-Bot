@@ -39,7 +39,7 @@ const SendPM = (() => {
 })();
 
 const SendPMI = (recipient_id: string, content: string) =>
-    SendPM(recipient_id, content).catch(Logger.Warn);
+    SendPM(recipient_id, content).catch(Logger.Debug);
 
 const CheckError = (e: unknown): e is { code: number } =>
     e instanceof Object && "code" in e && typeof e.code == "number";
@@ -227,7 +227,7 @@ endpoints.set("/update-global-status", async (request) => {
     const xgmid = Number(request.headers["userid"]);
     if (!(xgmid > 0)) return { code: 400 };
 
-    Logger.Log(`S: ${xgmid} - '${request.headers["status"]}'`);
+    Logger.Info(`S: ${xgmid} - '${request.headers["status"]}'`);
 
     const id = FindAuthUser(xgmid);
     if (!id) return { code: 200 };
@@ -303,8 +303,9 @@ const HandleRequest = async (
 };
 
 const OnError = (e: unknown): EndpointResult => {
+    if (CheckError(e)) return e;
     Logger.Error(e);
-    return CheckError(e) ? e : { code: 500 };
+    return { code: 500 };
 };
 
 createServer(async (request, response) => {
@@ -312,7 +313,7 @@ createServer(async (request, response) => {
     response.statusCode = code;
 
     if (code != 200) {
-        Logger.Log(`${code} ${request.method} '${request.url}'`);
+        Logger.Debug(`${code} ${request.method} '${request.url}'`);
     }
 
     if (content) {

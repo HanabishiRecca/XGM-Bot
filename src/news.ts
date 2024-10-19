@@ -159,8 +159,8 @@ const CheckNews = async (checkTime?: number) => {
         .reverse();
 
     if (!infos.length) return;
-    Logger.Log(`News count: ${infos.length}`);
-    Logger.Log("Posting...");
+    Logger.Info(`News count: ${infos.length}`);
+    Logger.Debug("Posting...");
     await PostNews(infos);
 
     return infos.reduce(
@@ -187,6 +187,6 @@ const WriteTimestamp = (timestamp: number) => {
     const result = await CheckNews(ReadTimestamp());
     if (!result) return;
 
-    Logger.Log("Saving data...");
+    Logger.Debug("Saving data...");
     WriteTimestamp(result);
 })();

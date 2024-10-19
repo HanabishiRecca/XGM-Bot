@@ -80,21 +80,21 @@ const CheckRevoked = async (
 };
 
 (async () => {
-    Logger.Log("Users sync job start.");
+    Logger.Debug("Users sync job start.");
 
-    Logger.Log("Loading storage...");
+    Logger.Debug("Loading storage...");
     const users = Storage.Load<string, number>(`${STORAGE}/users.db`);
-    Logger.Log(`Authorized users: ${users.size}.`);
+    Logger.Info(`Authorized users: ${users.size}.`);
 
-    Logger.Log("Fetching members...");
+    Logger.Debug("Fetching members...");
     const members = await FetchMembers();
-    Logger.Log(`Member count: ${members.size}.`);
+    Logger.Info(`Member count: ${members.size}.`);
 
-    Logger.Log("Syncing authorized users...");
+    Logger.Debug("Syncing authorized users...");
     await SyncUsers(users, members).catch(Logger.Error);
 
-    Logger.Log("Checking for revoked members...");
+    Logger.Debug("Checking for revoked members...");
     await CheckRevoked(users, members).catch(Logger.Error);
 
-    Logger.Log("Users sync job finished.");
+    Logger.Debug("Users sync job finished.");
 })();

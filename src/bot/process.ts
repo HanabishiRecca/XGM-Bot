@@ -1,8 +1,8 @@
 import Logger from "../util/log";
 
 export const Shutdown = (e: unknown, ok?: boolean) => {
-    ok ? Logger.Log(e) : Logger.Error(e);
-    Logger.Log("SHUTDOWN");
+    ok ? Logger.Debug(e) : Logger.Error(e);
+    Logger.Debug("SHUTDOWN");
     process.exit(ok ? 0 : 1);
 };
 
