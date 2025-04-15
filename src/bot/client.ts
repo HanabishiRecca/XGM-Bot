@@ -41,6 +41,12 @@ client.on(ClientEvents.WARN, (data) => {
 client.on(ClientEvents.ERROR, Logger.Error);
 client.on(ClientEvents.FATAL, Shutdown);
 
+client.on(ClientEvents.INTENT, ({ t, d }) => {
+    if (t == "READY") {
+        Logger.Debug(`Ready guilds: ${d.guilds.length}`);
+    }
+});
+
 process.on("exit", () => {
     const { session } = client;
     if (!session) return;
