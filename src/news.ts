@@ -106,11 +106,11 @@ const EditMessage = async (info: ItemInfo, id: string) => {
 
     await Actions.Webhook.EditMessage(WH_NEWS_ID, WH_NEWS_TOKEN, id, {
         embeds: [embed],
-    });
+    }).catch(Logger.Error);
 
     await Actions.Thread.Modify(id, {
         name: GenThreadName(embed.title),
-    });
+    }).catch(Logger.Error);
 };
 
 const PostMessage = async (info: ItemInfo) => {
