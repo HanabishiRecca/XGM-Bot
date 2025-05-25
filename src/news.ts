@@ -56,14 +56,16 @@ const DecodeHtmlEntity = (() => {
 
 const CleanupHtml = (str: string) => str.replace(/<\/?[^<>]*>/gm, "");
 
+const GetString = (value: unknown) => (typeof value == "string" ? value : "");
+
 type FeedItem = {
-    title: string;
-    author: string;
-    description: string;
-    link: string;
-    pubDate: string;
-    enclosure: {
-        url: string;
+    "title"?: unknown;
+    "dc:creator"?: unknown;
+    "description"?: unknown;
+    "link"?: unknown;
+    "pubDate"?: unknown;
+    "enclosure"?: {
+        url?: unknown;
     };
 };
 
@@ -86,16 +88,16 @@ const FetchFeed = async () => {
 };
 
 const GenEmbed = ({ item, date }: ItemInfo) => ({
-    title: DecodeHtmlEntity(item.title),
-    description: CleanupHtml(DecodeHtmlEntity(item.description)),
-    url: item.link,
+    title: DecodeHtmlEntity(GetString(item.title)),
+    description: CleanupHtml(DecodeHtmlEntity(GetString(item.description))),
+    url: GetString(item.link),
     footer: {
-        text: item.author,
+        text: GetString(item["dc:creator"]),
     },
     timestamp: date.toISOString(),
     color: config.embed_color,
     image: {
-        url: item.enclosure?.url,
+        url: GetString(item.enclosure?.url),
     },
 });
 
@@ -144,23 +146,29 @@ const PostNews = async (infos: ItemInfo[]) => {
         return messages.find(({ embeds }) => embeds?.[0]?.url == link)?.id;
     };
 
+    let n = 0;
+
     for (const info of infos) {
-        const id = FindExisting(info.item.link);
+        n++;
+        Logger.Debug(`Posting ${n}/${infos.length}...`);
+
+        const id = FindExisting(GetString(info.item.link));
         await (id ? EditMessage(info, id) : PostMessage(info));
+
+        WriteTimestamp(info.date.getTime());
     }
 };
 
 const CheckNews = async (checkTime?: number) => {
     if (!checkTime) return Date.now();
 
-    const infos = (await FetchFeed())
-        .map((item) => ({ date: new Date(item.pubDate), item } as ItemInfo))
+    const infos: ItemInfo[] = (await FetchFeed())
+        .map((item) => ({ date: new Date(GetString(item.pubDate)), item }))
         .filter(({ date }) => date.getTime() > checkTime)
         .reverse();
 
     if (!infos.length) return;
     Logger.Info(`News count: ${infos.length}`);
-    Logger.Debug("Posting...");
     await PostNews(infos);
 
     return infos.reduce(
@@ -183,10 +191,4 @@ const WriteTimestamp = (timestamp: number) => {
     renameSync(np, TIMESTAMP_FILE);
 };
 
-(async () => {
-    const result = await CheckNews(ReadTimestamp());
-    if (!result) return;
-
-    Logger.Debug("Saving data...");
-    WriteTimestamp(result);
-})();
+CheckNews(ReadTimestamp());
