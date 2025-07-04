@@ -16,6 +16,7 @@ const INTENTS =
 
 const SESSION_FILE = `${STORAGE}/session`;
 const client = new Client();
+let resumable = true;
 
 client.on(ClientEvents.CONNECT, () => {
     Logger.Debug("Connection established.");
@@ -36,6 +37,11 @@ client.on(ClientEvents.DISCONNECT, (code) =>
 
 client.on(ClientEvents.INFO, Logger.Info);
 client.on(ClientEvents.WARN, (data) => {
+    if (data.startsWith("Invalid session.")) {
+        resumable = false;
+        Shutdown(data);
+    }
+
     data == "Server forced reconnect." ? Logger.Debug(data) : Logger.Warn(data);
 });
 client.on(ClientEvents.ERROR, Logger.Error);
@@ -48,6 +54,7 @@ client.on(ClientEvents.INTENT, ({ t, d }) => {
 });
 
 process.on("exit", () => {
+    if (!resumable) return;
     const { session } = client;
     if (!session) return;
     const { id, seq } = session;
