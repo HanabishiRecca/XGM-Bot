@@ -22,7 +22,9 @@ export const ReadIncomingData = (incoming: IncomingMessage) =>
 export const HttpsGet = (url: string) =>
     new Promise<Buffer | null>((resolve, reject) => {
         get(url, (response) => {
-            if (response.statusCode != 200) return reject(response);
+            if (response.statusCode != 200) {
+                return reject(response.statusCode);
+            }
             ReadIncomingData(response).then(resolve).catch(reject);
         });
     });
