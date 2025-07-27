@@ -142,7 +142,7 @@ client.events.on(
 client.events.on(Events.GUILD_CREATE, ({ id, emojis }) => {
     Logger.Info("GUILD CREATE", id);
     if (!IsServer(id)) return;
-    RegisterCommands(config.id);
+    RegisterCommands(config.id, config.server);
     SetMarks(emojis);
 });
 

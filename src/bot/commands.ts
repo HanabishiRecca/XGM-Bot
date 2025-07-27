@@ -125,11 +125,11 @@ export const HandleInteraction = async ({
 
 let done = false;
 
-export const RegisterCommands = (id: string) => {
+export const RegisterCommands = (id: string, server: string) => {
     if (done) return;
     done = true;
 
-    Actions.Application.BulkOverwriteGlobalCommands(id, [
+    Actions.Application.BulkOverwriteGuildCommands(id, server, [
         {
             name: "who",
             type: Helpers.ApplicationCommandTypes.CHAT_INPUT,
