@@ -18,6 +18,4 @@ export const {
     SVC_PORT = Shutdown("Server port required."),
     CLIENT_SECRET = Shutdown("Client secret required."),
     REDIRECT_URL = Shutdown("Redirect URL required."),
-    WH_SYSLOG_ID = Shutdown("System log webhook id required."),
-    WH_SYSLOG_TOKEN = Shutdown("System log webhook token required."),
 } = process.env;

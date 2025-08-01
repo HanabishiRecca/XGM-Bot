@@ -6,8 +6,6 @@ import {
     CLIENT_SECRET,
     REDIRECT_URL,
     SVC_PORT,
-    WH_SYSLOG_ID,
-    WH_SYSLOG_TOKEN,
 } from "./process";
 import {
     config,
@@ -137,13 +135,6 @@ ${link}
     return 200;
 };
 
-const SendSysLogMsg = async (content: string) => {
-    for (let i = 0; i < content.length; i += MESSAGE_MAX_CHARS)
-        await Actions.Webhook.Execute(WH_SYSLOG_ID, WH_SYSLOG_TOKEN, {
-            content: content.substring(i, i + MESSAGE_MAX_CHARS),
-        });
-};
-
 const AttachXgmId = (user: Types.User & { xgmId?: number }) =>
     (user.xgmId = AuthUsers.get(user.id));
 
@@ -264,15 +255,6 @@ endpoints.set("/send", async (request) => {
     await Actions.Message.Create(channelid, {
         content: String(data).substring(0, MESSAGE_MAX_CHARS),
     });
-
-    return { code: 200 };
-});
-
-endpoints.set("/sys", async (request) => {
-    const data = await ReadIncomingData(request);
-    if (!data) return { code: 400 };
-
-    SendSysLogMsg(String(data)).catch(Logger.Error);
 
     return { code: 200 };
 });
