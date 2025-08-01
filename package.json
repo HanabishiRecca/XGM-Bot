@@ -6,8 +6,7 @@
         "start": "node --expose-gc ."
     },
     "dependencies": {
-        "discord-slim": "2.7.0",
-        "fast-xml-parser": "5.2.5"
+        "discord-slim": "2.7.0"
     },
     "devDependencies": {
         "@types/node": "*",
